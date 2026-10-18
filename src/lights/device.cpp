@@ -51,12 +51,15 @@ int max_units(DeviceType type) noexcept {
     case DeviceType::govee:
         return 84;
     case DeviceType::wled:
-        return 490;
     case DeviceType::artnet:
     case DeviceType::sacn:
-        return 170;
+        return kMaxLongStripUnits;
     }
     return 84;
+}
+
+int universes_needed(int units) noexcept {
+    return units <= kLedsPerUniverse ? 1 : (units + kLedsPerUniverse - 1) / kLedsPerUniverse;
 }
 
 bool uses_universe(DeviceType type) noexcept {

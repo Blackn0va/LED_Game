@@ -133,7 +133,55 @@ TEST_CASE("Art-Net-Treiber: Sequenz 1–255 umlaufend ohne 0, Ende als schwarzes
 TEST_CASE("Art-Net-Treiber: Universum außerhalb 0–32767 ist ein Bedienfehler") {
     CHECK_THROWS_AS(ArtNetProtocol(-1), Error);
     CHECK_THROWS_AS(ArtNetProtocol(32768), Error);
-    CHECK(ArtNetProtocol(0).max_units() == 170);
+    CHECK(ArtNetProtocol(0).max_units() == 2040);
+}
+
+TEST_CASE("Art-Net-Treiber: 170 LEDs ein Universum, 171 zwei – fortlaufend, je Universum eigene Sequenz") {
+    test::SinkLog log;
+    lights::LightOutput out(lights::OutputSettings{}, std::make_unique<ArtNetProtocol>(5), test::fake_sink(log),
+                            test::recording_sleeper(log));
+    out.start(0.0);
+    out.push(std::vector<Rgb>(170, Rgb{1, 2, 3}), 0.0);
+    REQUIRE(log.packets.size() == 1);
+    CHECK(at(log.packets[0], 17) == 254);  // 510 Kanäle = 0x01FE
+    CHECK(at(log.packets[0], 16) == 1);
+    log.clear();
+    std::vector<Rgb> leds(171, Rgb{1, 2, 3});
+    leds[170] = Rgb{9, 8, 7};  // die erste LED des zweiten Universums
+    out.push(leds, 1.0);
+    REQUIRE(log.packets.size() == 2);
+    CHECK(at(log.packets[0], 14) == 5);
+    CHECK(at(log.packets[1], 14) == 6);
+    CHECK(at(log.packets[0], 12) == 2);   // Universum 5: zweites Bild
+    CHECK(at(log.packets[1], 12) == 1);   // Universum 6: erstes Bild – eigene Zählung
+    CHECK(at(log.packets[1], 17) == 4);   // 3 Kanäle, auf 4 aufgefüllt
+    CHECK(at(log.packets[1], 18) == 9);
+    CHECK(at(log.packets[1], 20) == 7);
+    log.clear();
+    out.stop();
+    REQUIRE(log.packets.size() == 2);     // beide Universen schwarz
+    CHECK(at(log.packets[0], 14) == 5);
+    CHECK(at(log.packets[1], 14) == 6);
+    CHECK(at(log.packets[1], 18) == 0);
+    CHECK(at(log.packets[0], 18 + 509) == 0);
+}
+
+TEST_CASE("Art-Net-Treiber: Port-Adresse zählt über die Sub-Net-Grenze, Überlauf über 32767 wirft") {
+    test::SinkLog log;
+    lights::LightOutput out(lights::OutputSettings{}, std::make_unique<ArtNetProtocol>(15), test::fake_sink(log),
+                            test::recording_sleeper(log));
+    out.start(0.0);
+    out.push(std::vector<Rgb>(341, kWhite), 0.0);
+    REQUIRE(log.packets.size() == 3);
+    CHECK(at(log.packets[0], 14) == 0x0F);  // Sub-Net 0, Universum 15
+    CHECK(at(log.packets[1], 14) == 0x10);  // Sub-Net 1, Universum 0
+    CHECK(at(log.packets[2], 14) == 0x11);
+    test::SinkLog edge;
+    lights::LightOutput last(lights::OutputSettings{}, std::make_unique<ArtNetProtocol>(32767), test::fake_sink(edge),
+                             test::recording_sleeper(edge));
+    last.start(0.0);
+    CHECK_NOTHROW(last.push(std::vector<Rgb>(170, kWhite), 0.0));
+    CHECK_THROWS_AS(last.push(std::vector<Rgb>(171, kWhite), 1.0), Error);
 }
 
 }  // namespace ldu::artnet

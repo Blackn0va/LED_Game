@@ -3,9 +3,10 @@
 Stand: 2026-10-18
 
 Farbduell auf einem WLAN-LED-Streifen (Govee, WLED, Art-Net, sACN), Steuerung über die
-Tastatur, C++20/MSVC, Konsole statt Qt. Lokales Git-Repo seit 2026-10-18: `main` mit dem
-Grundstand, Zweig `feature/mehr-hersteller` mit den Treibern. **Kein Remote, nichts
-veröffentlicht** – ob und wo, entscheidet der Nutzer. MIT-Lizenz vorgeschlagen, nicht bestätigt.
+Tastatur, C++20/MSVC, Konsole statt Qt. Lokales Git-Repo seit 2026-10-18; `main` enthält
+alles (Grundstand, Hersteller, lange Streifen – die Zweige `feature/mehr-hersteller` und
+`feature/lange-streifen` sind per Vorspulen übernommen). **Kein Remote, nichts
+veröffentlicht** – Syncen/Pushen macht der Nutzer selbst. MIT-Lizenz vorgeschlagen, nicht bestätigt.
 
 ## Festgelegte Entscheidungen (nicht ohne Rückfrage ändern)
 
@@ -56,8 +57,14 @@ veröffentlicht** – ob und wo, entscheidet der Nutzer. MIT-Lizenz vorgeschlage
 - **Treiber bauen nur Datagramme** (`lights::LightProtocol`), alles Gemeinsame macht
   `lights::LightOutput` (Layout, Takt, Haltebild, Senden, Beenden mit Wartezeiten). Govee ist
   ohne Verhaltensänderung umgezogen – die alten Fälle laufen weiter, jetzt mit Wartezeiten.
-- **Grenzen je Geräteart** (`lights/device.hpp`): Govee 84, WLED 490 (DRGB), Art-Net/sACN 170
-  (ein Universum). Spielzellen bleiben höchstens 84 – die Streckenzeit hängt an Sekunden.
+- **Grenzen je Geräteart** (`lights/device.hpp`): Govee 84, WLED/Art-Net/sACN 2040 (gewählt:
+  12 Universen bzw. 5 DNRGB-Pakete je Bild). Spielzellen bleiben höchstens 84 – die
+  Streckenzeit hängt an Sekunden.
+- **Lange Streifen:** WLED bis 490 DRGB, darüber DNRGB zu je 489 (Doku nachgelesen); Art-Net
+  und sACN je 170 LEDs ein Universum, fortlaufend ab `--universum`, **Sequenz je Universum**;
+  sACN-Multicast über `sacn::UniverseRouter` (liest das Universum aus Byte 113/114, je
+  Gruppe eine Senke) – die Treiber-Schnittstelle bleibt „ein Paket, eine Senke“. Überlauf
+  über 32767/63999 fängt schon `check_device_limits` ab.
 - **Freigeben beim Beenden je Hersteller:** Govee 2 s + 3× Aus (gemessen) · WLED letztes Bild
   mit Frist 1 s, im Lauf Frist 2 s und Haltebild 0,5 s · sACN 3× „Strom endet“ (0x40) · Art-Net
   ein schwarzes Bild (kein Ende-Signal im Protokoll).
@@ -65,7 +72,7 @@ veröffentlicht** – ob und wo, entscheidet der Nutzer. MIT-Lizenz vorgeschlage
   Govee Multicast/4002, WLED mDNS als Legacy-Unicast von beliebigem Port (5353 hält der
   Windows-DNS-Client), Art-Net ArtPoll an die Broadcast-Adresse jeder Karte auf Port 6454.
   sACN hat keine Suche. Eine gescheiterte Suche steht in `problems`, die übrigen laufen weiter.
-- **WLED ohne `--segmente`:** die gemeldete LED-Zahl wird zu Abschnitten (höchstens 490), wenn
+- **WLED ohne `--segmente`:** die gemeldete LED-Zahl wird zu Abschnitten (höchstens 2040), wenn
   das Kampffeld dann ≥ 8 bleibt.
 - **Assistent setzt bei anderem Gerät** Abschnitte, Versatz, Effektbereich, Zellen und
   `umgedreht` zurück; Helligkeit, fps, Ton bleiben. Gleiches Gerät (Art + IP) behält alles.
@@ -79,7 +86,9 @@ veröffentlicht** – ob und wo, entscheidet der Nutzer. MIT-Lizenz vorgeschlage
 | Frage | Ergebnis (2026-10-18) |
 |---|---|
 | Bau MSVC 14.44, `/W4 /WX` | 0 Warnungen, 0 Fehler |
-| Tests | 14 Programme, 173 Fälle grün (core 10, net 11, lights 14, govee 19, wled 6, artnet 7, sacn 6, devices 7, game 44, sound 4, score 4, console 17, cli 18, setup 6) |
+| Tests | 14 Programme, 184 Fälle grün (core 10, net 11, lights 14, govee 19, wled 9, artnet 9, sacn 10, devices 8, game 44, sound 4, score 4, console 17, cli 19, setup 6) |
+| Gegenproben lange Streifen | DNRGB-Index immer 0 2 rot · 490 statt 489 je Teilbild 3 rot · Ende nur erstes Teilbild 1 rot · Art-Net gemeinsame Sequenz 1 rot · Universum zählt nicht weiter 2 rot (Loopback 1 rot) · nur erstes Universum schwarz 1 rot · sACN gemeinsame Sequenz 1 rot · Universum zählt nicht weiter 2 rot · Ende nur erstes Universum 1 rot · Router immer Gruppe 1 1 rot · Überlauf ungeprüft 1 rot · Universen falsch gerundet 1 rot |
+| WLED-Doku DNRGB (2026-10-18) | Byte 0 = 4, Byte 1 Frist, Byte 2/3 Startindex hoch/niedrig, ab 4 RGB, 489 je Paket; keine Gesamtgrenze genannt |
 | Gegenproben Hersteller (2026-10-18) | Govee 1× Aus 4 rot (Loopback 1 rot) · Govee ohne 2 s 2 rot · WLED Ende mit Lauf-Frist 1 rot · Art-Net ohne gerade Länge 2 rot · Sequenz über 0 1 rot · Steuerzeichen im Namen 1 rot · sACN ohne 0x40 1 rot · Länge falsch gezählt 2 rot · mDNS-Sprunggrenze 1000 1 rot · HTTP-Pfad ungeprüft 1 rot · JSON ohne Tiefengrenze 1 rot (Absturz) · Segmentgrenze der Ausgabe 1 rot · Grenze je Geräteart 3 rot · Assistent ohne Zurücksetzen 1 rot |
 | `--suchen` nach dem Umbau | H612C gefunden, Zustand „an, 78 %“, alle drei Suchen zusammen 2,1 s; Port 6454 frei |
 | Govee über Loopback (127.0.0.1:4003) | turn 1 → Razer an → Bild; `stop()` wartet ≥ 2 s, dann 3× Aus und nichts weiter |
@@ -170,7 +179,9 @@ veröffentlicht** – ob und wo, entscheidet der Nutzer. MIT-Lizenz vorgeschlage
 - Ob strenge Art-Net-Knoten ArtDmx nur von Quellport 6454 annehmen (LichtDuell sendet von
   einem beliebigen Port).
 - sACN-Multicast geht über die Karte der Standardroute; mit VPN/Hyper-V evtl. falsch.
-- Mehr als 490 LEDs (WLED-DNRGB) und mehrere Universen sind nicht eingebaut.
+- Art-Net: ob die Sequenz je Port-Adresse oder je Knoten zählt, war nicht belegbar
+  (Spezifikations-PDF komprimiert, Suche ohne Aussage) – gebaut ist „je Universum“.
+- Ob ältere WLED-Fassungen DNRGB kennen; ob 12 Universen bei 30 fps im WLAN flüssig bleiben.
 - Andere Govee-Modelle als der H612C: Farbgrenze und Rückkehr unbekannt.
 - GitHub-Action nie gelaufen; ob die Tastatur-Probe dort eine Konsole bekommt, ist offen.
 - MIT-Lizenz und Veröffentlichung: Entscheidung des Nutzers steht aus. Bei Veröffentlichung

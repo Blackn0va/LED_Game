@@ -8,6 +8,7 @@
 #include "net/udp.hpp"
 #include "sacn/driver.hpp"
 #include "sacn/protocol.hpp"
+#include "sacn/router.hpp"
 #include "wled/discovery.hpp"
 #include "wled/driver.hpp"
 
@@ -273,23 +274,33 @@ std::unique_ptr<lights::LightOutput> open_output(const Target& t, lights::Output
     case DeviceType::sacn:
         protocol = std::make_unique<sacn::SacnProtocol>(t.universe, sacn::random_cid());
         port = sacn::kPort;
-        if (ip.empty()) {
-            ip = sacn::multicast_group(t.universe);
-        }
         break;
     }
-    if (ip.empty()) {
+    // Multicast (sACN ohne IP): je Universum die eigene Gruppe (sacn/router.hpp).
+    const bool multicast = t.type == DeviceType::sacn && ip.empty();
+    if (ip.empty() && !multicast) {
         throw Error(Error::Kind::usage, std::string(lights::device_name(t.type)) + " braucht eine IP (--ip).");
     }
-    settings.target = ip;
+    settings.target = multicast ? "Multicast " + sacn::multicast_group(t.universe) : ip;
     if (lights::uses_universe(t.type)) {
-        settings.target += " · Universum " + std::to_string(t.universe);
+        // Im Testbild ist das Layout 1:1 (segments 0) – dann ist die Zahl der Universen erst
+        // beim ersten Bild bekannt und die Zeile nennt nur das erste.
+        const int count = lights::universes_needed(settings.layout.segments);
+        settings.target += count > 1 ? " · Universen " + std::to_string(t.universe) + "–" +
+                                           std::to_string(t.universe + count - 1)
+                                     : " · Universum " + std::to_string(t.universe);
     }
     if (settings.label.empty()) {
         settings.label = t.label;
     }
-    return std::make_unique<lights::LightOutput>(std::move(settings), std::move(protocol),
-                                                 net::UdpSender::open(ip, port));
+    std::unique_ptr<net::PacketSink> sink;
+    if (multicast) {
+        sink = std::make_unique<sacn::UniverseRouter>(
+            [](const std::string& group) { return net::UdpSender::open(group, sacn::kPort); });
+    } else {
+        sink = net::UdpSender::open(ip, port);
+    }
+    return std::make_unique<lights::LightOutput>(std::move(settings), std::move(protocol), std::move(sink));
 }
 
 }  // namespace ldu::devices

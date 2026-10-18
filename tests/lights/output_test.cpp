@@ -123,9 +123,15 @@ TEST_CASE("Gerätearten: Schlüssel hin und zurück, Schreibvarianten, Grenzen")
     CHECK(parse_device_type("art-net") == DeviceType::artnet);
     CHECK_FALSE(parse_device_type("hue"));
     CHECK(max_units(DeviceType::govee) == 84);
-    CHECK(max_units(DeviceType::wled) == 490);
-    CHECK(max_units(DeviceType::artnet) == 170);
-    CHECK(max_units(DeviceType::sacn) == 170);
+    CHECK(max_units(DeviceType::wled) == 2040);
+    CHECK(max_units(DeviceType::artnet) == 2040);
+    CHECK(max_units(DeviceType::sacn) == 2040);
+    CHECK(universes_needed(0) == 1);
+    CHECK(universes_needed(170) == 1);
+    CHECK(universes_needed(171) == 2);
+    CHECK(universes_needed(340) == 2);
+    CHECK(universes_needed(341) == 3);
+    CHECK(universes_needed(2040) == 12);
     CHECK_FALSE(uses_universe(DeviceType::wled));
     CHECK(min_universe(DeviceType::sacn) == 1);
     CHECK(max_universe(DeviceType::sacn) == 63999);

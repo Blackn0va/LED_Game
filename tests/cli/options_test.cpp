@@ -128,13 +128,24 @@ TEST_CASE("Optionen: Geräteart – Vorgabe Govee, Schlüssel und Schreibvariant
 
 TEST_CASE("Optionen: --segmente richtet sich nach der Geräteart, auch wenn --gerät danach steht") {
     CHECK(parse({"--segmente", "300", "--gerät", "wled"}).segments == 300);
-    CHECK(parse({"--gerät", "wled", "--segmente", "490"}).segments == 490);
-    CHECK_THROWS_AS(parse({"--gerät", "wled", "--segmente", "491"}), Error);
-    CHECK(parse({"--gerät", "artnet", "--segmente", "170"}).segments == 170);
-    CHECK_THROWS_WITH_AS(parse({"--gerät", "sacn", "--segmente", "171"}), doctest::Contains("höchstens 170"), Error);
+    CHECK(parse({"--gerät", "wled", "--segmente", "491"}).segments == 491);  // DNRGB
+    CHECK(parse({"--gerät", "wled", "--segmente", "2040"}).segments == 2040);
+    CHECK_THROWS_AS(parse({"--gerät", "wled", "--segmente", "2041"}), Error);
+    CHECK(parse({"--gerät", "artnet", "--segmente", "2040"}).segments == 2040);
+    CHECK_THROWS_WITH_AS(parse({"--gerät", "sacn", "--segmente", "2041"}), doctest::Contains("bis 2040"), Error);
     CHECK_THROWS_WITH_AS(parse({"--segmente", "85"}), doctest::Contains("Govee nimmt höchstens 84"), Error);
-    // Spielzellen bleiben bei höchstens 84, auch auf 490 Abschnitten.
-    CHECK(parse({"--gerät", "wled", "--segmente", "490"}).game_cells() == kMaxLeds);
+    // Spielzellen bleiben bei höchstens 84, auch auf 2040 Abschnitten.
+    CHECK(parse({"--gerät", "wled", "--segmente", "2040"}).game_cells() == kMaxLeds);
+}
+
+TEST_CASE("Optionen: mehrere Universen müssen ab --universum ins erlaubte Band passen") {
+    CHECK(parse({"--gerät", "sacn", "--universum", "63999", "--segmente", "170"}).universe == 63999);
+    CHECK_THROWS_WITH_AS(parse({"--gerät", "sacn", "--universum", "63999", "--segmente", "171"}),
+                         doctest::Contains("Universen 63999–64000"), Error);
+    CHECK(parse({"--gerät", "artnet", "--universum", "32756", "--segmente", "2040"}).segments == 2040);  // 12 bis 32767
+    CHECK_THROWS_AS(parse({"--gerät", "artnet", "--universum", "32757", "--segmente", "2040"}), Error);
+    // Ohne --universum gilt die Vorgabe (sACN 1): 2040 Abschnitte → Universen 1–12, passt.
+    CHECK(parse({"--gerät", "sacn", "--segmente", "2040"}).segments == 2040);
 }
 
 TEST_CASE("Optionen: --universum je Geräteart geprüft, bei Govee und WLED ohne Wirkung") {

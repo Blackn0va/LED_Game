@@ -34,7 +34,7 @@ Alle nennenswerten Änderungen an LichtDuell. Format nach
   mit ←/→, Zeitlupe bei Endgegner-Sieg und Spielende, Partienzähler mit bestem Lauf.
 - Computerspieler mit Persönlichkeiten (Reaktionszeit, Fehlerquote, Joker-Mut).
 - Taste A schaltet den Automodus mitten im Spiel an und aus.
-- Weitere Hersteller: **WLED** (UDP-Echtzeit DRGB, bis 490 LEDs, Suche per mDNS, LED-Zahl
+- Weitere Hersteller: **WLED** (UDP-Echtzeit DRGB/DNRGB, Suche per mDNS, LED-Zahl
   aus `/json/info`), **Art-Net** (ArtDmx, Suche per ArtPoll) und **sACN/E1.31** (Multicast
   oder Unicast, dreimal „Strom endet“ beim Beenden) – `--gerät`, `--universum`. Nach der
   jeweiligen Beschreibung gebaut und ohne Gerät getestet, an echter Hardware noch nicht.
@@ -50,8 +50,12 @@ Alle nennenswerten Änderungen an LichtDuell. Format nach
   Beenden macht `lights::LightOutput` für alle Hersteller; Govee zieht dorthin um, ohne sein
   Verhalten zu ändern (dieselben Pakete in derselben Reihenfolge, Wartezeiten jetzt im Test).
 - `--suchen` listet Govee, WLED und Art-Net, gleichzeitig in 2 s statt nacheinander.
-- `--segmente` richtet sich nach der Geräteart (Govee 84, WLED 490, Art-Net/sACN 170);
+- `--segmente` richtet sich nach der Geräteart (Govee 84, WLED, Art-Net und sACN 2040);
   Spielzellen bleiben bei höchstens 84.
+- Lange Streifen: WLED ab 491 LEDs per DNRGB in Teilbildern zu 489, Art-Net und sACN über
+  mehrere aufeinanderfolgende Universen ab `--universum` (je 170 LEDs, Sequenz je
+  Universum); sACN-Multicast schickt jedes Universum an seine eigene Gruppe. Reicht das Bild
+  über das letzte erlaubte Universum hinaus, bricht schon die Optionsprüfung ab.
 - `einstellungen.txt` kennt `gerät` und `universum`; ältere Dateien ohne `gerät` gelten
   als Govee.
 

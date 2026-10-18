@@ -10,9 +10,10 @@
 // --nur-vorschau still.
 //
 // Grenzen: --segmente richtet sich nach der Geräteart (lights/device.hpp) und wird erst am
-// Ende geprüft, weil --gerät auch hinter --segmente stehen darf. Spielzellen bleiben bei
-// höchstens kMaxLeds, auch auf einem 490-LED-WLED-Streifen – mehr Zellen machen die Strecke
-// nicht länger (die Laufzeit hängt an Sekunden, game/level.cpp), nur die Konsole zu breit.
+// Ende geprüft, weil --gerät auch hinter --segmente stehen darf; ebenso, ob die Universen ab
+// --universum für alle Abschnitte reichen. Spielzellen bleiben bei höchstens kMaxLeds, auch
+// auf einem 2040-LED-Streifen – mehr Zellen machen die Strecke nicht länger (die Laufzeit
+// hängt an Sekunden, game/level.cpp), nur die Konsole zu breit.
 //
 // Threads: reine Funktionen.
 // Fehler: parse_options wirft Error(Kind::usage) mit einem Satz, der die Option nennt.
@@ -33,7 +34,7 @@ namespace ldu::cli {
 inline constexpr int kDefaultLeds = 30;
 inline constexpr int kMinLeds = 8;
 inline constexpr int kMaxLeds = 84;       // Spielzellen (und Govee-Grenze, govee/protocol.hpp)
-inline constexpr int kMaxSegments = 490;  // größte Grenze aller Gerätearten (WLED-DRGB)
+inline constexpr int kMaxSegments = lights::kMaxLongStripUnits;  // größte Grenze aller Gerätearten
 inline constexpr int kDefaultFps = 30;
 inline constexpr int kMinFps = 5;
 inline constexpr int kMaxFps = 60;

@@ -4,7 +4,7 @@
 
 **Farbduell auf deinem WLAN-LED-Streifen – der Computer schießt, du schießt zurück, Endgegner inklusive. Nur mit der Tastatur.**
 
-![C++20](https://img.shields.io/badge/C%2B%2B-20-8b5cf6) ![Windows](https://img.shields.io/badge/Windows-10%2F11-8b5cf6) ![Lizenz](https://img.shields.io/badge/Lizenz-MIT-8b5cf6) ![Tests](https://img.shields.io/badge/Tests-173%20gr%C3%BCn-2ea44f) ![Probe](https://img.shields.io/badge/Tastatur--Probe-19%2F19-2ea44f) ![Govee](https://img.shields.io/badge/Govee%20H612C-am%20Ger%C3%A4t%20gepr%C3%BCft-2ea44f) ![WLED](https://img.shields.io/badge/WLED%20%C2%B7%20Art--Net%20%C2%B7%20sACN-ungepr%C3%BCft-lightgrey)
+![C++20](https://img.shields.io/badge/C%2B%2B-20-8b5cf6) ![Windows](https://img.shields.io/badge/Windows-10%2F11-8b5cf6) ![Lizenz](https://img.shields.io/badge/Lizenz-MIT-8b5cf6) ![Tests](https://img.shields.io/badge/Tests-184%20gr%C3%BCn-2ea44f) ![Probe](https://img.shields.io/badge/Tastatur--Probe-19%2F19-2ea44f) ![Govee](https://img.shields.io/badge/Govee%20H612C-am%20Ger%C3%A4t%20gepr%C3%BCft-2ea44f) ![WLED](https://img.shields.io/badge/WLED%20%C2%B7%20Art--Net%20%C2%B7%20sACN-ungepr%C3%BCft-lightgrey)
 
 [Geräte](#geräte) · [Schnellstart](#schnellstart) · [Spielen](#spielen) · [Automodus](#automodus) · [Spielregeln](#spielregeln) · [Endgegner](#endgegner) · [Effektbereich](#effektbereich) · [Einrichten](#einrichten) · [Optionen](#optionen) · [Bauen](#bauen) · [Wie es funktioniert](#wie-es-funktioniert) · [Fehlersuche](#fehlersuche) · [Mitmachen](#mitmachen) · [Stand](#stand)
 
@@ -23,9 +23,9 @@
 | Gerät | Weg | Suche | Farben je Bild | Am Gerät geprüft |
 |---|---|---|---|---|
 | **Govee** WLAN-Streifen mit „LAN-Steuerung“ | nicht dokumentierter Razer-Modus der LAN-API, UDP 4003 | Multicast, Antwort auf 4002 | bis 84 (H612C: 40) | ✅ H612C – andere Modelle nicht |
-| **WLED** (ESP8266/ESP32) | UDP-Echtzeit „DRGB“, Port 21324 | mDNS `_wled._tcp`, dann `/json/info` | bis 490 | ⏳ nein |
-| **Art-Net**-Knoten (auch WLED, Pixel-Controller) | ArtDmx, ein Universum, UDP 6454 | ArtPoll-Broadcast | bis 170 | ⏳ nein |
-| **sACN / E1.31**-Empfänger (auch WLED, xLights-Controller) | E1.31-Datenpakete, Multicast oder Unicast, UDP 5568 | keine (Empfänger melden sich nicht) | bis 170 | ⏳ nein |
+| **WLED** (ESP8266/ESP32) | UDP-Echtzeit: bis 490 LEDs „DRGB“, darüber „DNRGB“ in Teilbildern zu 489; Port 21324 | mDNS `_wled._tcp`, dann `/json/info` | bis 2040 | ⏳ nein |
+| **Art-Net**-Knoten (auch WLED, Pixel-Controller) | ArtDmx, je 170 LEDs ein Universum, fortlaufend ab `--universum`; UDP 6454 | ArtPoll-Broadcast | bis 2040 (12 Universen) | ⏳ nein |
+| **sACN / E1.31**-Empfänger (auch WLED, xLights-Controller) | E1.31-Datenpakete, je 170 LEDs ein Universum; Multicast (je Universum seine Gruppe) oder Unicast; UDP 5568 | keine (Empfänger melden sich nicht) | bis 2040 (12 Universen) | ⏳ nein |
 
 „Ungeprüft“ heißt: Die Pakete sind nach der jeweiligen Beschreibung gebaut und Byte für Byte sowie über echte Sockets (127.0.0.1) getestet – an einem echten WLED-, Art-Net- oder sACN-Gerät lief LichtDuell noch nie. Wer eins hat: [Rückmeldung als Issue](.github/ISSUE_TEMPLATE/neues-geraet.yml) hilft sehr.
 
@@ -189,8 +189,10 @@ out\rel\bin\Release\LichtDuell.exe --gerät wled --ip 192.168.1.61 --speichern
 ```
 
 ```bash
-out\rel\bin\Release\LichtDuell.exe --gerät artnet --ip 192.168.1.70 --universum 0 --segmente 170 --speichern
+out\rel\bin\Release\LichtDuell.exe --gerät artnet --ip 192.168.1.70 --universum 0 --segmente 300 --speichern
 ```
+
+300 Abschnitte belegen bei Art-Net und sACN zwei Universen: LED 1–170 im ersten, 171–300 im nächsten. Im Empfänger müssen die Universen deshalb fortlaufend eingestellt sein (hier 0 und 1). Bei Art-Net zählt die Port-Adresse über die Sub-Net-Grenze weiter: Auf Universum 15 folgt Sub-Net 1, Universum 0.
 
 ```bash
 out\rel\bin\Release\LichtDuell.exe --gerät sacn --universum 1 --segmente 150 --speichern
@@ -216,7 +218,7 @@ Die Einstellungsdatei ist von Hand änderbar (`schlüssel = wert`, `#` für Komm
 | `--gerät <art>` | `govee`, `wled`, `artnet` oder `sacn` (auch `e131`, `art-net`) | `govee` |
 | `--ip <adresse>` | Gerät direkt ansprechen, keine Suche (sACN: Unicast statt Multicast) | aus der Datei, sonst Suche |
 | `--universum <n>` | Art-Net 0–32767, sACN 1–63999 | Art-Net 0, sACN 1 |
-| `--segmente <n>` | Farben je Bild ans Gerät: Govee bis 84 (**H612C: 40**), WLED bis 490, Art-Net/sACN bis 170 | WLED: seine LED-Zahl, sonst wie `--leds` |
+| `--segmente <n>` | Farben je Bild ans Gerät: Govee bis 84 (**H612C: 40**), WLED, Art-Net und sACN bis 2040 (je 170 ein Universum mehr) | WLED: seine LED-Zahl, sonst wie `--leds` |
 | `--versatz <n>` | Abschnitte am Kanonen-Ende aus | 0 |
 | `--effektbereich <n>` | Abschnitte am Computer-Ende für den Effektbereich | 0 |
 | `--leds <8–84>` | Spielzellen; mit `--segmente` sonst so viele wie das Kampffeld (höchstens 84) | 30 |
@@ -264,9 +266,9 @@ Autopilot (--demo/--auto) ───┘                      │        Helligkei
 
 - **Treiber** (`src/<hersteller>/driver.*`) bauen nur Datagramme – ohne Netz und ohne Uhr. Layout, Takt, Haltebild, Senden, Fehlerzählung und das Freigeben beim Beenden macht `lights::LightOutput` für alle gleich. Deshalb ist jeder Treiber ohne Gerät testbar.
 - **Govee:** Die offizielle LAN-API (JSON über UDP, Suche per Multicast `239.255.255.250:4001`, Antworten an `4002`, Befehle an `4003`) kennt nur **eine** Farbe für den ganzen Streifen. Einzelne Abschnitte gehen über den nicht dokumentierten **`razer`-Befehl** (derselbe Weg wie Govee Desktop), Aufbau nach [OpenRGB-MR 2172](https://gitlab.com/CalcProgrammer1/OpenRGB/-/merge_requests/2172): `BB 00 <Länge> <Befehl> <Daten> <XOR>` als Base64 in `{"msg":{"cmd":"razer","data":{"pt":"…"}}}`. **Am H612C gemessen:** 30 und 40 Farben je Bild gehen, 50 bis 80 nicht; beim Beenden braucht er **2 s Ruhe und dreimal Razer-Aus**, sonst bleibt er auf dem letzten Bild stehen.
-- **WLED:** „DRGB“ nach der WLED-Doku: `02 <Frist> R G B …`. Jedes Bild trägt eine Frist von 2 s – stirbt das Programm hart, kehrt WLED danach von selbst zu seinem Effekt zurück. Haltebild alle 0,5 s.
-- **Art-Net:** ArtDmx an die IP des Knotens, Sequenz 1–255, gerade Kanalzahl; Suche per ArtPoll an die Broadcast-Adresse jeder Netzwerkkarte.
-- **sACN:** E1.31-Datenpakete mit zufälliger Quellkennung je Start, Priorität 100; ohne IP an die Multicast-Gruppe `239.255.<hi>.<lo>` des Universums; beim Beenden dreimal „Strom endet“.
+- **WLED:** nach der [WLED-Doku](https://kno.wled.ge/interfaces/udp-realtime/) bis 490 LEDs „DRGB“ `02 <Frist> R G B …`, darüber „DNRGB“ `04 <Frist> <Index hoch> <Index niedrig> R G B …` in Teilbildern zu 489 LEDs. Jedes Paket trägt eine Frist von 2 s – stirbt das Programm hart, kehrt WLED danach von selbst zu seinem Effekt zurück. Haltebild alle 0,5 s.
+- **Art-Net:** ArtDmx an die IP des Knotens, je 170 LEDs ein Universum, Sequenz 1–255 je Universum, gerade Kanalzahl; Suche per ArtPoll an die Broadcast-Adresse jeder Netzwerkkarte.
+- **sACN:** E1.31-Datenpakete mit zufälliger Quellkennung je Start, Priorität 100, je 170 LEDs ein Universum mit eigener Sequenz; ohne IP geht jedes Universum an seine eigene Multicast-Gruppe `239.255.<hi>.<lo>`; beim Beenden je Universum dreimal „Strom endet“.
 - **Spieltakt:** feste Schritte von 1/60 s, das Tempo bestimmt nur, wie viele je Bild – auch ×8 rechnet so genau wie ×1.
 - **Sparsam zeichnen:** Bild, Streifen und Konsole im 30er-Takt; die Konsole bekommt nur geänderte Zeilen (gemessen: Konsolenlast von 7,4–8,6 % auf 2,2–2,4 % eines Kerns).
 
@@ -281,7 +283,9 @@ Module: `core` (Farben, Text, Dateien, JSON), `net` (UDP, Suche, HTTP, mDNS), `l
 | „Kein Govee-Gerät hat auf die Suche geantwortet“ | LAN-Steuerung in der App aus, anderes Netz, oder die Windows-Firewall blockt eingehend UDP 4002. `--ip` nehmen. |
 | „UDP-Port 4002 ist belegt“ | Govee Desktop o. Ä. lauscht schon. Beenden; mit `--ip` fällt nur die Zustandsabfrage weg. |
 | „Kein WLED-Gerät hat auf die mDNS-Suche geantwortet“ | Firewall, anderes Netz – oder die Firmware antwortet nicht auf die hier benutzte Unicast-Anfrage (ungeprüft). `--gerät wled --ip …` geht ohne Suche. |
-| WLED zeigt nur einen Teil | Mehr als 490 LEDs gehen nicht über ein DRGB-Paket; `--segmente` auf die LED-Zahl setzen (der Assistent macht das). |
+| WLED zeigt nur einen Teil | `--segmente` auf die LED-Zahl setzen (der Assistent macht das). Ab 491 LEDs kommt DNRGB zum Einsatz – sehr alte WLED-Fassungen kennen es womöglich nicht (ungeprüft). |
+| Art-Net/sACN: nur die ersten 170 LEDs leuchten | Der Empfänger hört nur auf ein Universum. Die folgenden Universen (`--universum` + 1, + 2 …) im Empfänger dem Ausgang zuordnen. |
+| „… Abschnitte brauchen die Universen …“ | Das Bild reicht über das letzte erlaubte Universum hinaus (Art-Net 32767, sACN 63999). `--universum` kleiner wählen. |
 | WLED kehrt mitten im Spiel kurz zum Effekt zurück | WLAN verliert Pakete über mehr als 2 s. Näher an den Router oder `--fps` senken. |
 | „UDP-Port 6454 ist belegt“ | Ein anderes Art-Net-Programm (Jinx, xLights, QLC+) läuft. Beenden oder `--ip` angeben. |
 | sACN-Multicast kommt nicht an | Windows sendet Multicast über die Netzwerkkarte der Standardroute – mit VPN/Hyper-V kann das die falsche sein. `--ip` (Unicast) nehmen. |
@@ -304,6 +308,7 @@ Lizenz: [MIT](LICENSE). Fremdbestandteile: [THIRD-PARTY-NOTICES.md](THIRD-PARTY-
 - ✅ **Govee H612C am Gerät:** Razer-Modus, 40 Abschnitte, Richtung, Versatz und Effektbereich gesehen; nach Esc kehrt das Licht von vorher zurück
 - ✅ Treiber-Schnittstelle: Govee-Verhalten nach dem Umzug unverändert (dieselben Pakete in derselben Reihenfolge, jetzt auch die Wartezeiten 2,0/0,1/0,1 s geprüft); Suche findet den H612C weiterhin
 - ✅ WLED, Art-Net, sACN: Pakete Byte für Byte nach der Beschreibung, alle vier Treiber über echte Sockets (Loopback); 16 Gegenproben rot/grün
+- ✅ Lange Streifen bis 2040 LEDs: WLED-DNRGB, Art-Net und sACN über mehrere Universen, sACN-Multicast je Universum in seine Gruppe; Grenzen 490/491, 170/171, 340/341 getestet, 13 Gegenproben rot/grün
 - ✅ Assistent `--einrichten` mit umgeleiteter Eingabe durchgespielt (Abbruch, Eingabe von Hand, Unsinn)
 - ⏳ **WLED, Art-Net, sACN an keinem echten Gerät geprüft**; ob WLED auf die mDNS-Unicast-Anfrage antwortet, ist offen
 - ⏳ E1.31-Feldwerte aus der Erinnerung an die Norm, nicht gegen den Normtext oder ein Gerät geprüft

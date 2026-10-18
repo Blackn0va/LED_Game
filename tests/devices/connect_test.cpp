@@ -8,6 +8,7 @@
 #include "govee/protocol.hpp"
 #include "net/udp.hpp"
 #include "sacn/protocol.hpp"
+#include "sacn/router.hpp"
 #include "support/udp_listener.hpp"
 #include "wled/protocol.hpp"
 
@@ -101,6 +102,56 @@ TEST_CASE("Loopback sACN: Unicast an Port 5568, drei Ende-Pakete") {
         const auto end = listener.receive();
         REQUIRE(end);
         CHECK(static_cast<unsigned char>((*end)[112]) == sacn::kOptionTerminated);
+    }
+}
+
+TEST_CASE("Loopback lange Streifen: WLED 600 LEDs als zwei DNRGB, Art-Net und sACN 171 LEDs als zwei Universen") {
+    const net::NetworkSession session;
+    lights::OutputSettings s;
+    s.layout.segments = 600;
+    {
+        test::UdpListener listener(0);
+        Target t = loopback(DeviceType::wled);
+        t.port = listener.port();
+        auto out = open_output(t, s);
+        out->start(0.0);
+        out->push(std::vector<Rgb>(30, kWhite), 0.0);
+        const auto a = listener.receive();
+        const auto b = listener.receive();
+        REQUIRE(a);
+        REQUIRE(b);
+        CHECK(a->size() == 4 + 489 * 3);
+        CHECK(static_cast<unsigned char>((*b)[0]) == wled::kDnrgb);
+        CHECK(b->substr(2, 2) == std::string("\x01\xE9", 2));
+        CHECK(b->size() == 4 + 111 * 3);
+    }
+    s.layout.segments = 171;
+    {
+        test::UdpListener listener(artnet::kPort);
+        Target t = loopback(DeviceType::artnet);
+        t.universe = 3;
+        auto out = open_output(t, s);
+        CHECK(out->status().find("127.0.0.1 · Universen 3–4") != std::string::npos);
+        out->start(0.0);
+        out->push(std::vector<Rgb>(30, kWhite), 0.0);
+        const auto a = listener.receive();
+        const auto b = listener.receive();
+        REQUIRE(a);
+        REQUIRE(b);
+        CHECK(static_cast<unsigned char>((*a)[14]) == 3);
+        CHECK(static_cast<unsigned char>((*b)[14]) == 4);
+    }
+    {
+        test::UdpListener listener(sacn::kPort);
+        auto out = open_output(loopback(DeviceType::sacn), s);
+        out->start(0.0);
+        out->push(std::vector<Rgb>(30, kWhite), 0.0);
+        const auto a = listener.receive();
+        const auto b = listener.receive();
+        REQUIRE(a);
+        REQUIRE(b);
+        CHECK(sacn::packet_universe(*a) == 1);
+        CHECK(sacn::packet_universe(*b) == 2);
     }
 }
 

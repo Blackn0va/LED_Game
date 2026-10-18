@@ -82,10 +82,13 @@ TEST_CASE("Übernehmen: dasselbe Gerät behält Versatz und Effektbereich") {
     CHECK(o.segments == 150);
 }
 
-TEST_CASE("Übernehmen: WLED über 490 LEDs wird gekappt, unter 8 bleibt es bei den Vorgaben") {
+TEST_CASE("Übernehmen: WLED über 2040 LEDs wird gekappt, unter 8 bleibt es bei den Vorgaben") {
+    cli::Options long_strip;
+    apply_found(long_strip, wled_found(600));
+    CHECK(long_strip.segments == 600);  // über 490: DNRGB, jede LED ein Abschnitt
     cli::Options big;
-    apply_found(big, wled_found(600));
-    CHECK(big.segments == 490);
+    apply_found(big, wled_found(3000));
+    CHECK(big.segments == 2040);
     cli::Options tiny;
     apply_found(tiny, wled_found(5));
     CHECK(tiny.segments == 0);

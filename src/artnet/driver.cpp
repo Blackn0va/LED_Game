@@ -2,7 +2,10 @@
 
 #include "artnet/protocol.hpp"
 #include "core/error.hpp"
+#include "lights/device.hpp"
 #include "lights/layout.hpp"
+
+#include <algorithm>
 
 namespace ldu::artnet {
 
@@ -30,21 +33,40 @@ std::vector<std::string> ArtNetProtocol::start(double /*now_s*/) {
 }
 
 std::vector<std::string> ArtNetProtocol::frame(std::span<const Rgb> leds, double /*now_s*/) {
-    return {art_dmx(port_address_, next_sequence(), lights::rgb_bytes(leds))};
+    return packets(leds, false);
 }
 
 std::vector<lights::StopStep> ArtNetProtocol::stop(std::span<const Rgb> last) {
-    if (last.empty()) {
-        return {};
+    std::vector<lights::StopStep> steps;
+    for (std::string& p : packets(last, true)) {
+        steps.push_back(lights::StopStep{0.0, std::move(p)});
     }
-    const std::vector<std::uint8_t> black(last.size() * 3, 0);
-    return {lights::StopStep{0.0, art_dmx(port_address_, next_sequence(), black)}};
+    return steps;
 }
 
-std::uint8_t ArtNetProtocol::next_sequence() {
+std::vector<std::string> ArtNetProtocol::packets(std::span<const Rgb> leds, bool black) {
+    const auto per_universe = static_cast<std::size_t>(lights::kLedsPerUniverse);
+    std::vector<std::string> out;
+    for (std::size_t first = 0, i = 0; first < leds.size(); first += per_universe, ++i) {
+        const std::span<const Rgb> part = leds.subspan(first, std::min(leds.size() - first, per_universe));
+        std::vector<std::uint8_t> channels = lights::rgb_bytes(part);
+        if (black) {
+            std::fill(channels.begin(), channels.end(), std::uint8_t{0});
+        }
+        // art_dmx wirft, wenn port_address_ + i über 32767 hinausgeht.
+        out.push_back(art_dmx(port_address_ + static_cast<int>(i), next_sequence(i), channels));
+    }
+    return out;
+}
+
+std::uint8_t ArtNetProtocol::next_sequence(std::size_t universe_index) {
+    if (sequences_.size() <= universe_index) {
+        sequences_.resize(universe_index + 1, 0);
+    }
+    std::uint8_t& s = sequences_[universe_index];
     // 1–255 umlaufend; 0 hieße „Reihenfolge nicht prüfen“ und bleibt ausgespart.
-    sequence_ = sequence_ == 255 ? 1 : static_cast<std::uint8_t>(sequence_ + 1);
-    return sequence_;
+    s = s == 255 ? 1 : static_cast<std::uint8_t>(s + 1);
+    return s;
 }
 
 }  // namespace ldu::artnet

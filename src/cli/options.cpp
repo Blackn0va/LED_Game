@@ -41,14 +41,25 @@ void check_device_limits(const Options& o) {
                                             std::to_string(max) + " Farben je Bild, --segmente steht auf " +
                                             std::to_string(o.units()) + ".");
     }
-    if (o.universe && lights::uses_universe(o.device)) {
-        const int lo = lights::min_universe(o.device);
-        const int hi = lights::max_universe(o.device);
-        if (*o.universe < lo || *o.universe > hi) {
-            throw Error(Error::Kind::usage, "--universum " + std::to_string(*o.universe) + " gibt es bei " +
-                                                std::string(lights::device_name(o.device)) + " nicht (" +
-                                                std::to_string(lo) + " bis " + std::to_string(hi) + ").");
-        }
+    if (!lights::uses_universe(o.device)) {
+        return;
+    }
+    const int lo = lights::min_universe(o.device);
+    const int hi = lights::max_universe(o.device);
+    const int first = o.universe.value_or(lights::default_universe(o.device));
+    if (first < lo || first > hi) {
+        throw Error(Error::Kind::usage, "--universum " + std::to_string(first) + " gibt es bei " +
+                                            std::string(lights::device_name(o.device)) + " nicht (" +
+                                            std::to_string(lo) + " bis " + std::to_string(hi) + ").");
+    }
+    // Über 170 Abschnitte belegt das Bild mehrere Universen hintereinander. Ohne diese
+    // Prüfung fiele ein Überlauf (sACN 63999 + 1) erst beim ersten Bild mitten im Start auf.
+    const int last = first + lights::universes_needed(o.units()) - 1;
+    if (last > hi) {
+        throw Error(Error::Kind::usage, std::to_string(o.units()) + " Abschnitte brauchen die Universen " +
+                                            std::to_string(first) + "–" + std::to_string(last) + ", " +
+                                            std::string(lights::device_name(o.device)) + " geht nur bis " +
+                                            std::to_string(hi) + " – --universum kleiner wählen.");
     }
 }
 
@@ -207,8 +218,8 @@ std::string usage_text() {
            "  --ip <adresse>         Gerät direkt ansprechen (sACN: Unicast statt Multicast)\n"
            "  --universum <n>        Art-Net 0–32767 (Vorgabe 0), sACN 1–63999 (Vorgabe 1)\n"
            "  --leds <8–84>          Spielzellen (Vorgabe 30, mit --segmente: die sichtbaren)\n"
-           "  --segmente <n>         Farben je Bild ans Gerät: Govee bis 84 (H612C: 40), WLED bis 490,\n"
-           "                         Art-Net und sACN bis 170 (WLED: Vorgabe ist seine LED-Zahl)\n"
+           "  --segmente <n>         Farben je Bild ans Gerät: Govee bis 84 (H612C: 40), WLED, Art-Net und\n"
+           "                         sACN bis 2040 (je 170 ein Universum mehr; WLED: Vorgabe ist seine LED-Zahl)\n"
            "  --versatz <n>          so viele Abschnitte am Kanonen-Ende auslassen (z. B. hinter dem Bett)\n"
            "  --effektbereich <n>    so viele Abschnitte am Computer-Ende für Leben, Joker und Effekte\n"
            "  --fps <5–60>           Bilder je Sekunde an den Streifen (Vorgabe 30)\n"

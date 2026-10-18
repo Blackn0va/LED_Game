@@ -4,12 +4,17 @@
 //   DRGB   Byte 0 = 2, Byte 1 = Frist in Sekunden, danach R G B je LED, höchstens 490.
 //          Kommt innerhalb der Frist kein neues Paket, kehrt WLED in seinen normalen
 //          Modus zurück (255 hieße: bleibt im Echtzeitmodus).
+//   DNRGB  Byte 0 = 4, Byte 1 = Frist, Byte 2/3 = Index der ersten LED (hohes Byte zuerst),
+//          ab Byte 4 R G B, höchstens 489 LEDs je Paket – laut Doku eigens für mehr als 490
+//          LEDs über mehrere Pakete. Eine Gesamtgrenze nennt die Doku nicht (nachgelesen
+//          2026-10-18, kno.wled.ge/interfaces/udp-realtime).
 //   Port   21324 (Vorgabe, in WLED unter Sync einstellbar; /json/info nennt ihn als udpport).
 //   Info   GET /json/info → {"name":…, "leds":{"count":…}, "ver":…, "brand":"WLED", …}
 // Gegen ein echtes WLED-Gerät ist nichts davon geprüft (Gedaechtnis.md → Offen).
 //
 // Threads: reine Funktionen.
-// Fehler: drgb_packet wirft Error(protocol) bei 0 oder mehr als kMaxDrgbLeds Farben.
+// Fehler: drgb_packet wirft Error(protocol) bei 0 oder mehr als kMaxDrgbLeds Farben,
+// dnrgb_packet bei 0 oder mehr als kMaxDnrgbLeds Farben oder einem Index über 65535.
 
 #pragma once
 
@@ -26,10 +31,14 @@ namespace ldu::wled {
 inline constexpr std::uint16_t kUdpPort = 21324;
 inline constexpr std::uint16_t kHttpPort = 80;
 inline constexpr int kMaxDrgbLeds = 490;
+inline constexpr int kMaxDnrgbLeds = 489;
 inline constexpr std::uint8_t kDrgb = 2;
+inline constexpr std::uint8_t kDnrgb = 4;
 inline constexpr std::string_view kMdnsService = "_wled._tcp.local";
 
 std::string drgb_packet(std::span<const Rgb> leds, std::uint8_t timeout_s);
+// Ein Teilbild ab LED first_index.
+std::string dnrgb_packet(int first_index, std::span<const Rgb> leds, std::uint8_t timeout_s);
 
 struct WledInfo final {
     std::string name;      // Gerätename aus den WLED-Einstellungen

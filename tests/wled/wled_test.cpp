@@ -47,6 +47,52 @@ TEST_CASE("WLED: DRGB ist 02, Frist, dann R G B je LED") {
     CHECK_THROWS_AS(drgb_packet(std::vector<Rgb>{}, 1), Error);
 }
 
+TEST_CASE("WLED: DNRGB ist 04, Frist, Startindex hohes/niedriges Byte, dann R G B je LED") {
+    const std::vector<Rgb> one{{1, 2, 3}};
+    CHECK(dnrgb_packet(0x01E9, one, 2) == bytes({0x04, 0x02, 0x01, 0xE9, 1, 2, 3}));
+    CHECK(dnrgb_packet(0, std::vector<Rgb>(489, kBlack), 1).size() == 4 + 489 * 3);
+    CHECK(dnrgb_packet(65535, one, 1).substr(2, 2) == bytes({0xFF, 0xFF}));
+    CHECK_THROWS_AS(dnrgb_packet(0, std::vector<Rgb>(490, kBlack), 1), Error);
+    CHECK_THROWS_AS(dnrgb_packet(0, std::vector<Rgb>{}, 1), Error);
+    CHECK_THROWS_AS(dnrgb_packet(65536, one, 1), Error);
+    CHECK_THROWS_AS(dnrgb_packet(-1, one, 1), Error);
+}
+
+TEST_CASE("WLED-Treiber: bis 490 LEDs ein DRGB, ab 491 DNRGB-Teilbilder zu je 489 mit fortlaufendem Index") {
+    const auto at490 = frame_packets(std::vector<Rgb>(490, kWhite), 2);
+    REQUIRE(at490.size() == 1);
+    CHECK(at490[0].size() == 2 + 490 * 3);
+    CHECK(static_cast<unsigned char>(at490[0][0]) == 0x02);
+    std::vector<Rgb> leds(491, kWhite);
+    leds[489] = Rgb{7, 8, 9};  // erste LED des zweiten Teilbilds
+    const auto at491 = frame_packets(leds, 2);
+    REQUIRE(at491.size() == 2);
+    CHECK(at491[0].substr(0, 4) == bytes({0x04, 0x02, 0x00, 0x00}));
+    CHECK(at491[0].size() == 4 + 489 * 3);
+    CHECK(at491[1].substr(0, 7) == bytes({0x04, 0x02, 0x01, 0xE9, 7, 8, 9}));  // Index 489
+    CHECK(at491[1].size() == 4 + 2 * 3);
+    const auto at979 = frame_packets(std::vector<Rgb>(979, kWhite), 2);
+    REQUIRE(at979.size() == 3);
+    CHECK(at979[2].substr(2, 2) == bytes({0x03, 0xD2}));  // Index 978
+    CHECK(at979[2].size() == 4 + 1 * 3);
+    CHECK(frame_packets(std::vector<Rgb>(2040, kWhite), 2).size() == 5);
+}
+
+TEST_CASE("WLED-Treiber: Ende schickt jedes Teilbild mit Frist 1") {
+    test::SinkLog log;
+    lights::LightOutput out(lights::OutputSettings{}, std::make_unique<WledProtocol>(), test::fake_sink(log),
+                            test::recording_sleeper(log));
+    out.start(0.0);
+    out.push(std::vector<Rgb>(600, kWhite), 0.0);
+    REQUIRE(log.packets.size() == 2);
+    log.clear();
+    out.stop();
+    REQUIRE(log.packets.size() == 2);
+    CHECK(static_cast<unsigned char>(log.packets[0][1]) == 1);
+    CHECK(static_cast<unsigned char>(log.packets[1][1]) == 1);
+    CHECK(log.packets[1].substr(2, 2) == bytes({0x01, 0xE9}));
+}
+
 TEST_CASE("WLED: /json/info liefert Name, LED-Zahl, Version und UDP-Port") {
     const auto info = parse_info(kInfo);
     REQUIRE(info);

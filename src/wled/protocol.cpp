@@ -22,6 +22,29 @@ std::string drgb_packet(std::span<const Rgb> leds, std::uint8_t timeout_s) {
     return p;
 }
 
+std::string dnrgb_packet(int first_index, std::span<const Rgb> leds, std::uint8_t timeout_s) {
+    if (leds.empty() || leds.size() > static_cast<std::size_t>(kMaxDnrgbLeds)) {
+        throw Error(Error::Kind::protocol, "Ein WLED-DNRGB-Teilbild braucht 1 bis " + std::to_string(kMaxDnrgbLeds) +
+                                               " Farben, nicht " + std::to_string(leds.size()) + ".");
+    }
+    if (first_index < 0 || first_index > 0xFFFF) {
+        throw Error(Error::Kind::protocol,
+                    "WLED-DNRGB-Index " + std::to_string(first_index) + " passt nicht in zwei Byte.");
+    }
+    std::string p;
+    p.reserve(4 + leds.size() * 3);
+    p.push_back(static_cast<char>(kDnrgb));
+    p.push_back(static_cast<char>(timeout_s));
+    p.push_back(static_cast<char>(first_index >> 8));
+    p.push_back(static_cast<char>(first_index & 0xFF));
+    for (const Rgb& c : leds) {
+        p.push_back(static_cast<char>(c.r));
+        p.push_back(static_cast<char>(c.g));
+        p.push_back(static_cast<char>(c.b));
+    }
+    return p;
+}
+
 std::optional<WledInfo> parse_info(std::string_view json) {
     const auto root = parse_json(json);
     if (!root || !root->is_object()) {
