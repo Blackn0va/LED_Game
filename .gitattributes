@@ -1,0 +1,17 @@
+# Im Repo LF; Arbeitskopie nach core.autocrlf. Ausnahmen unten.
+* text=auto
+
+# Windows-Werkzeuge: PowerShell und Ressourcen mit CRLF.
+*.ps1       text eol=crlf
+*.rc.in     text eol=crlf
+
+*.exe       binary
+*.dll       binary
+*.png       binary
+
+# Vendorte Dateien byte-genau (LF): cmake/LduDeps.cmake und build.ps1 prüfen ihren
+# SHA-256 gegen deps.lock.json. Mit text=auto bekäme ein Klon unter core.autocrlf=true
+# CRLF, der Hash passte nie und configure bräche ab (so im Signierungstool am
+# 2026-10-14 passiert). Wer das zurückdreht, macht jeden Klon unbaubar.
+third_party/**        -text
+licenses/doctest/**   -text

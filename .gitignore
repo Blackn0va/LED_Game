@@ -1,0 +1,10 @@
+# Bauausgaben (build.ps1: out\rel)
+out/
+build/
+CMakeUserPresets.json
+.vs/
+*.user
+
+# Reste von Bearbeitungen
+*.bak
+*.orig

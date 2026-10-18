@@ -1,0 +1,27 @@
+{
+  "format": 1,
+  "about": "Sperrdatei aller Abhängigkeiten von LichtDuell. CMake (cmake/LduDeps.cmake) und build.ps1 (Stufe check) prüfen die vendorten Dateien gegen diese Hashes; build.ps1 liest den Generator von hier. Am 2026-10-18 auf diesem Rechner nachgemessen.",
+  "vendored": {
+    "doctest": {
+      "version": "2.4.11",
+      "tag": "v2.4.11",
+      "commit": "ae7a13539fb71f270b87eb2e874fbac80bc8dda2",
+      "license": "MIT",
+      "origin": "Kopie aus kraken/third_party/doctest (dort aus den angegebenen Quellen geladen und gehasht), byte-gleich mit Signierungstool",
+      "sources": {
+        "third_party/doctest/doctest.h": "https://raw.githubusercontent.com/doctest/doctest/v2.4.11/doctest/doctest.h",
+        "licenses/doctest/LICENSE.txt": "https://raw.githubusercontent.com/doctest/doctest/v2.4.11/LICENSE.txt"
+      },
+      "sha256": {
+        "third_party/doctest/doctest.h": "44faa038e9c3f9728efbda143748d01124ea0a27f4bf78f35a15d8fab2e039fb",
+        "licenses/doctest/LICENSE.txt": "0fe0b331fa1513dcce8604ff1fa925f32d1cea17d8aeb1c2471fad40d291adc5"
+      }
+    }
+  },
+  "toolchain": {
+    "msvc": "14.44",
+    "vs_instance": "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools",
+    "cmake": "4.4.4",
+    "generator": "Visual Studio 17 2022"
+  }
+}
