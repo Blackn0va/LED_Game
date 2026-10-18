@@ -19,10 +19,14 @@
 #include "game/autoplay.hpp"
 #include "game/calibration.hpp"
 #include "game/game.hpp"
+#include "devices/connect.hpp"
 #include "game/level.hpp"
-#include "govee/strip.hpp"
-#include "govee/udp.hpp"
+#include "govee/discovery.hpp"
+#include "lights/device.hpp"
+#include "lights/output.hpp"
+#include "net/udp.hpp"
 #include "score/highscore.hpp"
+#include "setup/wizard.hpp"
 #include "sound/player.hpp"
 
 #include <windows.h>
@@ -33,6 +37,7 @@
 #include <cstdint>
 #include <exception>
 #include <filesystem>
+#include <iostream>
 #include <memory>
 #include <optional>
 #include <string>
@@ -56,9 +61,12 @@ inline constexpr int kConsoleFps = 30;
 inline constexpr int kAutoMinSoundPriority = 3;  // Joker, Gold, Stufe, Endgegner, Spielende
 inline constexpr double kSlowMotionS = 1.6;
 inline constexpr double kSlowMotionFactor = 0.25;
-// stop() wartet 2 s, bevor es den Razer-Modus abschaltet (govee/strip.hpp) – ohne Hinweis
-// sähe das wie ein Hänger aus.
-inline constexpr const char* kResetNotice = "\x1b[0m\n\n  Streifen kehrt in seinen alten Zustand zurück (2 s) …\x1b[K";
+// Govee wartet beim Beenden 2 s, bevor es den Razer-Modus abschaltet (govee/driver.hpp) –
+// ohne Hinweis sähe das wie ein Hänger aus. Die anderen Treiber warten nicht.
+std::string reset_notice(ldu::lights::DeviceType type) {
+    return std::string("\x1b[0m\n\n  Streifen kehrt in seinen alten Zustand zurück") +
+           (type == ldu::lights::DeviceType::govee ? " (2 s)" : "") + " …\x1b[K";
+}
 
 class TimerResolution final {
 public:
@@ -75,20 +83,6 @@ private:
     bool active_;
 };
 
-std::string no_device_hint() {
-    return "Kein Govee-Gerät hat auf die Suche geantwortet. Prüfen:\n"
-           "  1. Govee-App → Streifen → Einstellungen → „LAN-Steuerung“ einschalten\n"
-           "     (der Schalter erscheint manchmal erst nach einigen Minuten).\n"
-           "  2. PC und Streifen im selben Netz (kein Gast-WLAN, keine Client-Isolation).\n"
-           "  3. Windows-Firewall: eingehend UDP 4002 für LichtDuell.exe erlauben.\n"
-           "  4. Oder die IP direkt angeben (steht im Router): LichtDuell --ip 192.168.x.y\n"
-           "Ohne Streifen spielen: LichtDuell --nur-vorschau";
-}
-
-std::string device_line(const ldu::govee::DeviceInfo& d) {
-    return "  " + d.ip + "  " + (d.sku.empty() ? "?" : d.sku) + "  " + d.device + "\n";
-}
-
 std::string status_text(const std::optional<ldu::govee::DeviceStatus>& s, const std::string& why) {
     if (!s) {
         return "Zustand unbekannt (" + why + ")";
@@ -96,89 +90,189 @@ std::string status_text(const std::optional<ldu::govee::DeviceStatus>& s, const 
     return std::string(s->on ? "an" : "aus") + ", Helligkeit " + std::to_string(s->brightness) + " %";
 }
 
+void print_problems(const ldu::devices::Report& report) {
+    for (const std::string& p : report.problems) {
+        ldu::console::print("  ! " + p + "\n");
+    }
+}
+
 int run_scan() {
-    const ldu::govee::NetworkSession net;
-    ldu::console::print("Suche Govee-Geräte im Netz (2 s) …\n");
-    const auto devices = ldu::govee::scan_devices(kScanWait);
-    if (devices.empty()) {
-        ldu::console::print(no_device_hint() + "\n");
+    ldu::console::print("Suche Govee, WLED und Art-Net im Netz (2 s) …\n");
+    const auto report = ldu::devices::discover_all(kScanWait);
+    print_problems(report);
+    if (report.found.empty()) {
+        ldu::console::print("Nichts gefunden. Govee: " + ldu::devices::no_device_hint(ldu::lights::DeviceType::govee) +
+                            "\nWLED und Art-Net: IP mit --gerät wled|artnet --ip angeben.\n");
         return 1;
     }
-    ldu::console::print("  IP-Adresse       Modell  Geräte-ID\n");
-    for (const auto& d : devices) {
-        std::string why;
-        const auto status = ldu::govee::query_status(d.ip, kStatusWait, why);
-        ldu::console::print(device_line(d) + "      " + status_text(status, why) + "\n");
+    for (const auto& f : report.found) {
+        ldu::console::print("  " + ldu::devices::found_line(f) + "\n");
+        if (f.type == ldu::lights::DeviceType::govee) {
+            std::string why;
+            const auto status = ldu::govee::query_status(f.ip, kStatusWait, why);
+            ldu::console::print("           " + status_text(status, why) + "\n");
+        }
     }
+    ldu::console::print("sACN-Empfänger melden sich nicht von selbst: --gerät sacn [--ip …] [--universum n].\n");
     return 0;
 }
 
-struct Target final {
-    std::string ip;
-    std::string label;
+struct StripLink final {
+    std::unique_ptr<ldu::lights::LightOutput> output;
+    ldu::lights::DeviceType type = ldu::lights::DeviceType::govee;
+    std::string ip;                // tatsächlich verwendete IP (auch aus der Suche) – fürs Speichern
+    std::optional<int> universe;   // Art-Net/sACN, auch aus der Suche – fürs Speichern
+    std::string note;              // Zusatz für die Statuszeile (Zustand vor dem Spiel)
 };
 
-// Streifen aus --ip, sonst aus der Suche. Kein Gerät oder mehrere sind ein Fehler mit
-// Hinweis – still in die Vorschau zu fallen, sähe aus wie ein Streifen, der nicht reagiert.
-Target resolve_target(const ldu::cli::Options& o) {
-    if (!o.ip.empty()) {
-        return Target{o.ip, ""};
+// Werte übernehmen, die erst das Gerät kennt. WLED meldet seine LED-Zahl; ohne --segmente
+// wird jede LED ein Abschnitt (höchstens 490), sonst bekäme ein 150-LED-Streifen nur 30
+// Farben und der Rest bliebe dunkel. Gilt nur, wenn das Kampffeld danach groß genug ist.
+void adopt_detected(ldu::cli::Options& o, const ldu::devices::Target& t) {
+    if (t.type != ldu::lights::DeviceType::wled || o.segments > 0 || t.leds <= 0) {
+        return;
     }
-    ldu::console::print("Suche Govee-Streifen im Netz (2 s) …\n");
-    const auto devices = ldu::govee::scan_devices(kScanWait);
-    if (devices.empty()) {
-        throw Error(Error::Kind::network, no_device_hint());
+    const int units = std::min(t.leds, ldu::lights::max_units(t.type));
+    if (units - o.skip - o.zone >= ldu::cli::kMinLeds) {
+        o.segments = units;
+        ldu::console::print("WLED meldet " + std::to_string(t.leds) + " LEDs → " + std::to_string(units) +
+                            " Abschnitte.\n");
     }
-    if (devices.size() > 1) {
-        std::string text = "Mehrere Govee-Geräte gefunden – bitte eins mit --ip wählen:\n";
-        for (const auto& d : devices) {
-            text += device_line(d);
-        }
-        throw Error(Error::Kind::usage, text);
-    }
-    ldu::console::print("Gefunden:\n" + device_line(devices.front()));
-    return Target{devices.front().ip, devices.front().sku};
 }
 
-struct StripLink final {
-    std::unique_ptr<ldu::govee::StripOutput> output;
-    std::string ip;    // tatsächlich verwendete IP (auch aus der Suche) – fürs Speichern
-    std::string note;  // Zusatz für die Statuszeile (Zustand vor dem Spiel)
-};
-
-StripLink open_strip(const ldu::cli::Options& o) {
+StripLink open_strip(ldu::cli::Options& o) {
     StripLink link;
+    link.type = o.device;
     if (o.preview_only) {
         return link;
     }
-    Target target = resolve_target(o);
-    // Zustand vor dem Spiel: War der Streifen aus, geht er beim Beenden wieder aus.
-    // Ohne Antwort bleibt er an (fail-open, Komfort – siehe query_status).
-    std::string why;
-    const auto before = ldu::govee::query_status(target.ip, kStatusWait, why);
-    ldu::govee::StripSettings settings;
-    link.ip = target.ip;
-    settings.ip = std::move(target.ip);
-    settings.label = std::move(target.label);
+    const ldu::devices::Target target = ldu::devices::resolve(
+        ldu::devices::Request{o.device, o.ip, o.universe}, [](const std::string& s) { ldu::console::print(s); });
+    adopt_detected(o, target);
+    ldu::lights::OutputSettings settings;
     settings.max_fps = static_cast<double>(o.fps);
     settings.reversed = o.reversed;
     settings.brightness = static_cast<double>(o.brightness) / 100.0;
-    settings.turn_off_at_end = before && !before->on;
     // Das Block-Testbild liefert schon eine Farbe je Abschnitt; dort keine zweite Abbildung.
     if (!o.calibration) {
-        settings.layout = ldu::govee::StripLayout{o.segments, o.skip, o.zone};
+        settings.layout = ldu::lights::StripLayout{o.segments, o.skip, o.zone};
     }
-    if (!before) {
-        link.note = " · " + status_text(before, why) + ", bleibt danach an";
-    } else if (!before->on) {
-        link.note = " · war aus, geht danach wieder aus";
+    link.ip = target.ip;
+    if (ldu::lights::uses_universe(target.type)) {
+        link.universe = target.universe;
     }
-    link.output = std::make_unique<ldu::govee::StripOutput>(std::move(settings));
+    link.note = target.note;
+    link.output = ldu::devices::open_output(target, std::move(settings));
     return link;
 }
 
 std::string link_status(const StripLink& link) {
     return link.output ? link.output->status() + link.note : "Nur Vorschau – kein Streifen angeschlossen.";
+}
+
+std::filesystem::path chosen_settings_path(const ldu::cli::Options& o) {
+    return o.settings_file.empty() ? ldu::cli::settings_path() : std::filesystem::path(ldu::widen(o.settings_file));
+}
+
+// Liest eine Zeile von der Konsole; nullopt bei Dateiende (Eingabe geschlossen).
+std::optional<std::string> ask(const std::string& prompt) {
+    ldu::console::print(prompt);
+    std::string line;
+    if (!std::getline(std::cin, line)) {
+        return std::nullopt;
+    }
+    return line;
+}
+
+// Gerät von Hand: Art, IP, bei Art-Net/sACN das Universum. nullopt = abgebrochen.
+std::optional<ldu::devices::Found> ask_manual() {
+    const auto type_text = ask("Geräteart (govee, wled, artnet, sacn): ");
+    if (!type_text) {
+        return std::nullopt;
+    }
+    ldu::devices::Found f;
+    f.type = ldu::cli::parse_device("Geräteart", *type_text);
+    const auto ip = ask(f.type == ldu::lights::DeviceType::sacn ? "IP-Adresse (Enter = Multicast): " : "IP-Adresse: ");
+    if (!ip) {
+        return std::nullopt;
+    }
+    f.ip = *ip;
+    if (!f.ip.empty() && !ldu::net::is_ipv4(f.ip)) {
+        throw Error(Error::Kind::usage, "„" + f.ip + "“ ist keine IPv4-Adresse.");
+    }
+    if (f.ip.empty() && f.type != ldu::lights::DeviceType::sacn) {
+        throw Error(Error::Kind::usage, std::string(ldu::lights::device_name(f.type)) + " braucht eine IP-Adresse.");
+    }
+    if (ldu::lights::uses_universe(f.type)) {
+        const int fallback = ldu::lights::default_universe(f.type);
+        const auto text = ask("Universum (Enter = " + std::to_string(fallback) + "): ");
+        if (!text) {
+            return std::nullopt;
+        }
+        f.universe = text->empty() ? fallback
+                                   : ldu::cli::parse_bounded("Universum", *text, ldu::lights::min_universe(f.type),
+                                                             ldu::lights::max_universe(f.type));
+    }
+    const std::string problem = ldu::devices::complete_manual(f);
+    if (!problem.empty()) {
+        ldu::console::print("  " + problem + "\n");
+    }
+    return f;
+}
+
+// --einrichten: suchen, wählen, speichern. Liefert die neuen Optionen, wenn danach das
+// Testbild laufen soll; nullopt bei Abbruch oder „kein Testbild“.
+std::optional<ldu::cli::Options> run_setup(ldu::cli::Options o) {
+    ldu::console::print("LichtDuell einrichten\n\nSuche Govee, WLED und Art-Net im Netz (2 s) …\n");
+    const auto report = ldu::devices::discover_all(kScanWait);
+    print_problems(report);
+    if (report.found.empty()) {
+        ldu::console::print("Kein Gerät hat geantwortet – von Hand angeben (i) oder sACN per Multicast (s).\n");
+    }
+    ldu::console::print("\n");
+    for (const std::string& line : ldu::setup::menu_lines(report.found)) {
+        ldu::console::print(line + "\n");
+    }
+    const auto line = ask(report.found.empty() ? "\nAuswahl: " : "\nAuswahl (Enter = 1): ");
+    if (!line) {
+        return std::nullopt;
+    }
+    const auto choice = ldu::setup::parse_choice(*line, report.found.size());
+    ldu::devices::Found chosen;
+    switch (choice.kind) {
+    case ldu::setup::Choice::Kind::device:
+        chosen = report.found[choice.index];
+        break;
+    case ldu::setup::Choice::Kind::sacn_multicast:
+        chosen.type = ldu::lights::DeviceType::sacn;
+        chosen.universe = ldu::lights::default_universe(chosen.type);
+        break;
+    case ldu::setup::Choice::Kind::manual: {
+        const auto manual = ask_manual();
+        if (!manual) {
+            return std::nullopt;
+        }
+        chosen = *manual;
+        break;
+    }
+    case ldu::setup::Choice::Kind::quit:
+        ldu::console::print("Abgebrochen, nichts gespeichert.\n");
+        return std::nullopt;
+    case ldu::setup::Choice::Kind::invalid:
+        throw Error(Error::Kind::usage, "„" + *line + "“ steht nicht in der Liste.");
+    }
+    ldu::setup::apply_found(o, chosen);
+    ldu::cli::check_device_limits(o);
+    const auto path = chosen_settings_path(o);
+    ldu::cli::save_settings(path, o);
+    ldu::console::print("\nGespeichert: " + ldu::narrow(path.native()) + "\n" + ldu::cli::format_settings(o));
+    const auto again = ask("\nTestbild jetzt zeigen, um Versatz und Effektbereich einzustellen? (J/n): ");
+    if (!again || (!again->empty() && again->front() != 'j' && again->front() != 'J')) {
+        ldu::console::print("Fertig. Spielen: LichtDuell\n");
+        return std::nullopt;
+    }
+    o.calibration = true;
+    return o;
 }
 
 int run_calibration(const ldu::cli::Options& o, StripLink& link) {
@@ -230,10 +324,13 @@ int run_calibration(const ldu::cli::Options& o, StripLink& link) {
                 if (!link.ip.empty()) {
                     cal.ip = link.ip;
                 }
+                if (link.universe) {
+                    cal.universe = link.universe;
+                }
                 // Speichern ist Komfort: Ein Fehler steht sichtbar in der Hinweiszeile, das
                 // Testbild läuft weiter (bewusst fail-open).
                 try {
-                    const auto path = ldu::cli::settings_path();
+                    const auto path = chosen_settings_path(cal);
                     ldu::cli::save_settings(path, cal);
                     note = "Gespeichert: " + ldu::narrow(path.native()) + " – ab jetzt reicht „LichtDuell“.";
                 } catch (const Error& e) {
@@ -247,7 +344,7 @@ int run_calibration(const ldu::cli::Options& o, StripLink& link) {
         }
         const double t = now_s();
         if (t >= next_draw) {
-            // Gespiegelt wird in StripOutput (Layout 1:1, siehe open_strip) – hier nicht noch einmal.
+            // Gespiegelt wird in LightOutput (Layout 1:1, siehe open_strip) – hier nicht noch einmal.
             const std::vector<ldu::Rgb> frame = ldu::segment_calibration_frame(cal.segments, cal.skip, cal.zone, t);
             if (link.output) {
                 link.output->push(frame, t);
@@ -279,7 +376,7 @@ int run_calibration(const ldu::cli::Options& o, StripLink& link) {
         console->wait_input(kWaitMs);
     }
     if (link.output) {
-        console->write(kResetNotice);
+        console->write(reset_notice(link.type));
         link.output->stop();
     }
     return 0;
@@ -766,7 +863,7 @@ int run_game(const ldu::cli::Options& o, StripLink& link) {
     }
 
     if (link.output) {
-        console->write(kResetNotice);
+        console->write(reset_notice(link.type));
         link.output->stop();
     }
     return 0;
@@ -782,28 +879,38 @@ int wmain(int argc, wchar_t** argv) {
         for (int i = 1; i < argc; ++i) {
             args.push_back(ldu::narrow(argv[i]));
         }
-        // Einstellungsdatei vor der Kommandozeile lesen – außer mit --ohne-einstellungen.
+        // Einstellungsdatei vor der Kommandozeile lesen – außer mit --ohne-einstellungen. Mit
+        // --einstellungen <datei> diese statt der Vorgabe; fehlt sie, gelten die Vorgaben (so
+        // legt „--einrichten --einstellungen flur.txt“ eine neue an).
         ldu::cli::Options base;
         if (std::find(args.begin(), args.end(), "--ohne-einstellungen") == args.end()) {
-            ldu::cli::load_settings(ldu::cli::settings_path(), base);
+            const auto own = ldu::cli::settings_file_argument(args);
+            ldu::cli::load_settings(own ? std::filesystem::path(ldu::widen(*own)) : ldu::cli::settings_path(), base);
         }
-        const ldu::cli::Options options = ldu::cli::parse_options(args, base);
+        ldu::cli::Options options = ldu::cli::parse_options(args, base);
         if (options.help) {
             ldu::console::print(ldu::cli::usage_text());
             return 0;
         }
         if (options.save) {
-            const auto path = ldu::cli::settings_path();
+            const auto path = chosen_settings_path(options);
             ldu::cli::save_settings(path, options);
             ldu::console::print("Gespeichert: " + ldu::narrow(path.native()) + "\n" + ldu::cli::format_settings(options));
             return 0;
         }
+        std::optional<ldu::net::NetworkSession> net;
+        if (!options.preview_only) {
+            net.emplace();
+        }
         if (options.scan) {
             return run_scan();
         }
-        std::optional<ldu::govee::NetworkSession> net;
-        if (!options.preview_only) {
-            net.emplace();
+        if (options.setup) {
+            auto chosen = run_setup(options);
+            if (!chosen) {
+                return 0;
+            }
+            options = std::move(*chosen);
         }
         StripLink link = open_strip(options);
         return options.calibration ? run_calibration(options, link) : run_game(options, link);

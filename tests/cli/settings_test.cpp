@@ -65,6 +65,33 @@ TEST_CASE("Einstellungen: Tippfehler und falsche Werte nennen die Zeile, statt s
     CHECK_THROWS_AS(apply_settings("umgedreht = vielleicht\n", o), Error);
 }
 
+TEST_CASE("Einstellungen: Geräteart und Universum hin und zurück, alte Dateien ohne gerät sind Govee") {
+    Options legacy;
+    apply_settings("ip = 192.0.2.21\nsegmente = 40\n", legacy);
+    CHECK(legacy.device == lights::DeviceType::govee);
+    Options a;
+    a.device = lights::DeviceType::artnet;
+    a.ip = "192.0.2.70";
+    a.universe = 4;
+    a.segments = 170;
+    const std::string text = format_settings(a);
+    CHECK(text.find("gerät = artnet\n") != std::string::npos);
+    CHECK(text.find("universum = 4\n") != std::string::npos);
+    Options b;
+    apply_settings(text, b);
+    CHECK(b.device == lights::DeviceType::artnet);
+    CHECK(b.universe == 4);
+    CHECK(b.segments == 170);
+    // Govee und WLED schreiben kein Universum, das nur verwirren würde.
+    CHECK(format_settings(Options{}).find("universum") == std::string::npos);
+    CHECK(format_settings(Options{}).find("gerät = govee\n") != std::string::npos);
+    Options c;
+    CHECK_THROWS_WITH_AS(apply_settings("gerät = hue\n", c), doctest::Contains("govee, wled"), Error);
+    Options plain;
+    apply_settings("geraet = sacn\n", plain);  // umlaut-ok: Datei von einer Tastatur ohne ä
+    CHECK(plain.device == lights::DeviceType::sacn);
+}
+
 TEST_CASE("Einstellungen: Datei im Bauordner speichern und laden; fehlende Datei ändert nichts") {
     const std::filesystem::path dir = std::filesystem::path(LDU_TEST_BINARY_DIR) / "tmp" / "einstellungen";
     std::filesystem::remove_all(dir);

@@ -2,8 +2,10 @@
 
 Stand: 2026-10-18
 
-Farbduell auf einem Govee-WLAN-Streifen, Steuerung über die Tastatur, C++20/MSVC,
-Konsole statt Qt. Kein Git-Repo (Stand heute), nichts committet.
+Farbduell auf einem WLAN-LED-Streifen (Govee, WLED, Art-Net, sACN), Steuerung über die
+Tastatur, C++20/MSVC, Konsole statt Qt. Lokales Git-Repo seit 2026-10-18: `main` mit dem
+Grundstand, Zweig `feature/mehr-hersteller` mit den Treibern. **Kein Remote, nichts
+veröffentlicht** – ob und wo, entscheidet der Nutzer. MIT-Lizenz vorgeschlagen, nicht bestätigt.
 
 ## Festgelegte Entscheidungen (nicht ohne Rückfrage ändern)
 
@@ -51,13 +53,37 @@ Konsole statt Qt. Kein Git-Repo (Stand heute), nichts committet.
 - **Nächster Klumpen wird einmal ausgewürfelt** (`pending_`), Stufe 1 würfelt kein Gold –
   so bleibt die Zufallsfolge unabhängig von der Bildrate und Seeds bleiben vergleichbar.
 - **Kein Setup, keine Signatur** – das Spiel wird nicht ausgeliefert.
+- **Treiber bauen nur Datagramme** (`lights::LightProtocol`), alles Gemeinsame macht
+  `lights::LightOutput` (Layout, Takt, Haltebild, Senden, Beenden mit Wartezeiten). Govee ist
+  ohne Verhaltensänderung umgezogen – die alten Fälle laufen weiter, jetzt mit Wartezeiten.
+- **Grenzen je Geräteart** (`lights/device.hpp`): Govee 84, WLED 490 (DRGB), Art-Net/sACN 170
+  (ein Universum). Spielzellen bleiben höchstens 84 – die Streckenzeit hängt an Sekunden.
+- **Freigeben beim Beenden je Hersteller:** Govee 2 s + 3× Aus (gemessen) · WLED letztes Bild
+  mit Frist 1 s, im Lauf Frist 2 s und Haltebild 0,5 s · sACN 3× „Strom endet“ (0x40) · Art-Net
+  ein schwarzes Bild (kein Ende-Signal im Protokoll).
+- **Suchen gleichzeitig** (`devices::discover_all`, je Hersteller ein Thread und Socket):
+  Govee Multicast/4002, WLED mDNS als Legacy-Unicast von beliebigem Port (5353 hält der
+  Windows-DNS-Client), Art-Net ArtPoll an die Broadcast-Adresse jeder Karte auf Port 6454.
+  sACN hat keine Suche. Eine gescheiterte Suche steht in `problems`, die übrigen laufen weiter.
+- **WLED ohne `--segmente`:** die gemeldete LED-Zahl wird zu Abschnitten (höchstens 490), wenn
+  das Kampffeld dann ≥ 8 bleibt.
+- **Assistent setzt bei anderem Gerät** Abschnitte, Versatz, Effektbereich, Zellen und
+  `umgedreht` zurück; Helligkeit, fps, Ton bleiben. Gleiches Gerät (Art + IP) behält alles.
+- **Datenordner bleibt `%LOCALAPPDATA%\StreamWizard\LichtDuell`** (Hausregel, und die
+  Einstellungen des Nutzers liegen dort) – auch im Open-Source-Stand.
+- **Netzantworten sind feindlich:** JSON mit Tiefen- und Längengrenze, mDNS mit Sprunggrenze
+  16, Art-Net-Namen ohne Steuerzeichen, HTTP-Antwort ≤ 256 KiB und Pfad ohne CR/LF.
 
 ## Gemessen (nicht geraten)
 
 | Frage | Ergebnis (2026-10-18) |
 |---|---|
 | Bau MSVC 14.44, `/W4 /WX` | 0 Warnungen, 0 Fehler |
-| Tests | 7 Programme, 112 Fälle grün (core 5, game 44, govee 25, sound 4, score 4, console 17, cli 13) |
+| Tests | 14 Programme, 173 Fälle grün (core 10, net 11, lights 14, govee 19, wled 6, artnet 7, sacn 6, devices 7, game 44, sound 4, score 4, console 17, cli 18, setup 6) |
+| Gegenproben Hersteller (2026-10-18) | Govee 1× Aus 4 rot (Loopback 1 rot) · Govee ohne 2 s 2 rot · WLED Ende mit Lauf-Frist 1 rot · Art-Net ohne gerade Länge 2 rot · Sequenz über 0 1 rot · Steuerzeichen im Namen 1 rot · sACN ohne 0x40 1 rot · Länge falsch gezählt 2 rot · mDNS-Sprunggrenze 1000 1 rot · HTTP-Pfad ungeprüft 1 rot · JSON ohne Tiefengrenze 1 rot (Absturz) · Segmentgrenze der Ausgabe 1 rot · Grenze je Geräteart 3 rot · Assistent ohne Zurücksetzen 1 rot |
+| `--suchen` nach dem Umbau | H612C gefunden, Zustand „an, 78 %“, alle drei Suchen zusammen 2,1 s; Port 6454 frei |
+| Govee über Loopback (127.0.0.1:4003) | turn 1 → Razer an → Bild; `stop()` wartet ≥ 2 s, dann 3× Aus und nichts weiter |
+| Assistent mit umgeleiteter Eingabe | `q` speichert nichts · `i`/wled/192.0.2.1 → Datei mit `gerät = wled`, Hinweis „antwortet nicht“ · `7` → Fehler · echte einstellungen.txt per Hash unverändert |
 | CPU (Demo, 15 s, conhost, je 2 Läufe) | vorher Spiel 0,9/1,6 %, conhost 7,4/8,6 % · nachher (30er-Takt + ScreenDiffer) Spiel 0,5/1,1 %, conhost 2,4/2,2 % · `--auto schnell` 1,1 % / 2,3 % |
 | Automodus im Test (21 Zellen) | schnell: Stufe 10, 3 Endgegner, kein Spielende · langsam: Stufe ≥ 4 (Farbwurm besiegt) |
 | Automodus im Konsolenfenster (Foto) | schnell: nach ~12 s Stufe 3, Kombo 15 ×4 · langsam: nach 8 s Stufe 1 |
@@ -122,9 +148,33 @@ Konsole statt Qt. Kein Git-Repo (Stand heute), nichts committet.
   per `PrintWindow(…, 2)` und schließt das Fenster. Ein Fenster geht dabei kurz auf.
 - **Nutzer bei Messungen am Streifen:** vorher genau sagen, worauf er achten soll und wann es
   losgeht (10 s Vorlauf); einfache Fragen („welche Farben?“) statt Platzhalter-Antworten.
+- **PowerShell und deutsche Anführungszeichen:** „ und “ gelten in PowerShell-Zeichenketten
+  als Anführungszeichen. Ein `.Replace()` mit „…“ im Befehl hat eine Zeile in settings.cpp
+  zerlegt (2026-10-18). Text mit typografischen Zeichen nur über das Edit-Werkzeug oder aus
+  einer Datei einsetzen.
+- **Gegenprobe mit Endlosschleife taugt nicht:** Eine Schleife ohne Seiteneffekt ist in C++
+  undefiniertes Verhalten, MSVC hat sie wegoptimiert – der Test blieb grün, obwohl die
+  Sprunggrenze fehlte. Gegenproben mit endlicher, falscher Grenze bauen (mDNS: 1000 statt 16).
+- **Loopback-Tests binden feste Ports** auf 127.0.0.1 (4003, 6454, 5568). Läuft Govee Desktop
+  oder ein Art-Net-/sACN-Programm, scheitert `ldu_test_devices` mit „belegt“.
+- **Ein Lauf der App-PowerShell mit `Remove-Item` und Regex daneben** wurde als Systempfad
+  geblockt – Skripte als Datei schreiben, Löschen über `[IO.File]::Delete`.
 
 ## Offen
 
+- **WLED, Art-Net, sACN an keinem echten Gerät geprüft.** Erste Prüfung: Testbild, Spiel,
+  Rückkehr nach Esc – jeweils mit jemandem, der hinschaut.
+- Ob WLED (ESP32/ESP8266) auf die mDNS-Legacy-Unicast-Anfrage antwortet; sonst bräuchte es
+  Port 5353 mit SO_REUSEADDR oder die Windows-API `DnsServiceBrowse`.
+- E1.31-Feldwerte und die Art-Net-Fristen stammen aus der Erinnerung, nicht aus dem Normtext.
+- Ob strenge Art-Net-Knoten ArtDmx nur von Quellport 6454 annehmen (LichtDuell sendet von
+  einem beliebigen Port).
+- sACN-Multicast geht über die Karte der Standardroute; mit VPN/Hyper-V evtl. falsch.
+- Mehr als 490 LEDs (WLED-DNRGB) und mehrere Universen sind nicht eingebaut.
+- Andere Govee-Modelle als der H612C: Farbgrenze und Rückkehr unbekannt.
+- GitHub-Action nie gelaufen; ob die Tastatur-Probe dort eine Konsole bekommt, ist offen.
+- MIT-Lizenz und Veröffentlichung: Entscheidung des Nutzers steht aus. Bei Veröffentlichung
+  werden Commit-Name und -Adresse sowie der Name in LICENSE öffentlich.
 - Effektbereich und Automodus am Streifen noch nicht bewusst angeschaut.
 - Ob `--auto schnell` mit 30 fps am Streifen flüssig wirkt oder `--fps` hoch muss.
 - Ob weniger als 2 s Ruhe vor dem Aus auch reichen (Beenden ginge schneller); 0,15 s war

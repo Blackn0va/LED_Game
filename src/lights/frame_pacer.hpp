@@ -3,14 +3,15 @@
 // Das Spiel rechnet mit über 60 Bildern je Sekunde, der Streifen soll höchstens
 // max_fps bekommen (DMXCore nennt bis 40/s als Obergrenze, H618A dort flüssig bei 60).
 // Unveränderte Bilder gehen nicht raus; nach keepalive_s aber doch, damit das Gerät
-// den Razer-Modus nicht nach einer Minute ohne Daten verlässt.
+// den Echtzeitmodus nicht verlässt (Govee nach einer Minute ohne Daten, WLED nach seiner
+// Frist, E1.31-Empfänger nach 2,5 s). Die Haltezeit gibt der Treiber vor.
 //
 // Threads: nicht threadsicher.
 // Fehler: keine.
 
 #pragma once
 
-namespace ldu::govee {
+namespace ldu::lights {
 
 class FramePacer final {
 public:
@@ -28,4 +29,4 @@ private:
     bool sent_any_ = false;
 };
 
-}  // namespace ldu::govee
+}  // namespace ldu::lights

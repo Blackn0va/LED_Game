@@ -10,7 +10,7 @@ set_tests_properties(ldu_probe_keys PROPERTIES LABELS integration TIMEOUT 300)
 
 # Messung am echten Streifen, jemand muss hinschauen – deshalb kein ctest.
 add_executable(ldu_probe_govee govee_probe.cpp)
-target_link_libraries(ldu_probe_govee PRIVATE ldu::compile_defaults ldu::govee ws2_32)
+target_link_libraries(ldu_probe_govee PRIVATE ldu::compile_defaults ldu::govee ldu::net ws2_32)
 ldu_strict_warnings(ldu_probe_govee)
 set_target_properties(ldu_probe_govee PROPERTIES FOLDER "probes")
 

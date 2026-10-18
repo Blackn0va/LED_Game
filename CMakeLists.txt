@@ -44,7 +44,7 @@ include(LduTesting)
 message(STATUS "LichtDuell ${PROJECT_VERSION}: Tests=${LDU_BUILD_TESTS}")
 
 # Module in Abhängigkeitsreihenfolge (keine Zyklen).
-set(LDU_MODULES core game govee sound score console cli)
+set(LDU_MODULES core net lights govee wled artnet sacn devices game sound score console cli setup)
 foreach(_m IN LISTS LDU_MODULES)
     add_subdirectory(src/${_m})
 endforeach()

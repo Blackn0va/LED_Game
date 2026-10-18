@@ -117,6 +117,50 @@ TEST_CASE("Optionen: --auto langsam/normal/schnell, nicht mit --demo, --testbild
     CHECK(parse({"--auto", "schnell", "--stufe", "6"}).start_level == 6);
 }
 
+TEST_CASE("Optionen: Geräteart – Vorgabe Govee, Schlüssel und Schreibvarianten, Unsinn abgelehnt") {
+    CHECK(parse({}).device == lights::DeviceType::govee);
+    CHECK(parse({"--gerät", "wled"}).device == lights::DeviceType::wled);
+    CHECK(parse({"--gerät", "artnet"}).device == lights::DeviceType::artnet);
+    CHECK(parse({"--gerät", "e131"}).device == lights::DeviceType::sacn);
+    CHECK_THROWS_WITH_AS(parse({"--gerät", "hue"}), doctest::Contains("govee, wled, artnet oder sacn"), Error);
+    CHECK(parse({"--geraet", "wled"}).device == lights::DeviceType::wled);  // umlaut-ok: Tastatur ohne ä
+}
+
+TEST_CASE("Optionen: --segmente richtet sich nach der Geräteart, auch wenn --gerät danach steht") {
+    CHECK(parse({"--segmente", "300", "--gerät", "wled"}).segments == 300);
+    CHECK(parse({"--gerät", "wled", "--segmente", "490"}).segments == 490);
+    CHECK_THROWS_AS(parse({"--gerät", "wled", "--segmente", "491"}), Error);
+    CHECK(parse({"--gerät", "artnet", "--segmente", "170"}).segments == 170);
+    CHECK_THROWS_WITH_AS(parse({"--gerät", "sacn", "--segmente", "171"}), doctest::Contains("höchstens 170"), Error);
+    CHECK_THROWS_WITH_AS(parse({"--segmente", "85"}), doctest::Contains("Govee nimmt höchstens 84"), Error);
+    // Spielzellen bleiben bei höchstens 84, auch auf 490 Abschnitten.
+    CHECK(parse({"--gerät", "wled", "--segmente", "490"}).game_cells() == kMaxLeds);
+}
+
+TEST_CASE("Optionen: --universum je Geräteart geprüft, bei Govee und WLED ohne Wirkung") {
+    CHECK(parse({"--gerät", "artnet", "--universum", "0"}).universe == 0);
+    CHECK(parse({"--gerät", "artnet", "--universum", "32767"}).universe == 32767);
+    CHECK_THROWS_AS(parse({"--gerät", "artnet", "--universum", "32768"}), Error);
+    CHECK_THROWS_AS(parse({"--gerät", "sacn", "--universum", "0"}), Error);
+    CHECK(parse({"--gerät", "sacn", "--universum", "63999"}).universe == 63999);
+    CHECK_THROWS_AS(parse({"--universum", "64000"}), Error);
+    CHECK(parse({"--universum", "0"}).universe == 0);  // Govee: steht drin, stört nicht
+}
+
+TEST_CASE("Optionen: --einrichten steht allein, --einstellungen nimmt einen Pfad") {
+    CHECK(parse({"--einrichten"}).setup);
+    CHECK(parse({"--einrichten", "--einstellungen", "flur.txt"}).settings_file == "flur.txt");
+    CHECK_THROWS_AS(parse({"--einrichten", "--ip", "192.0.2.1"}), Error);
+    CHECK_THROWS_AS(parse({"--einrichten", "--testbild"}), Error);
+    CHECK_THROWS_AS(parse({"--suchen", "--einrichten"}), Error);
+    CHECK_THROWS_AS(parse({"--einstellungen"}), Error);
+    CHECK_THROWS_AS(parse({"--einstellungen", "a.txt", "--ohne-einstellungen"}), Error);
+    const std::vector<std::string> args{"--stufe", "3", "--einstellungen", "C:/x/flur.txt"};
+    CHECK(settings_file_argument(args) == "C:/x/flur.txt");
+    CHECK_FALSE(settings_file_argument(std::vector<std::string>{"--stufe", "3"}));
+    CHECK_THROWS_AS(settings_file_argument(std::vector<std::string>{"--einstellungen"}), Error);
+}
+
 TEST_CASE("Optionen: Demo, Startstufe, Ton und Testbild") {
     const Options o = parse({"--demo", "--stufe", "9", "--ohne-ton"});
     CHECK(o.demo);

@@ -1,0 +1,36 @@
+name: Fehler melden
+description: Etwas tut nicht, was es soll – Absturz, falsche Anzeige, Meldung.
+labels: ["fehler"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Sicherheitslücken bitte nicht hier, sondern wie in SECURITY.md beschrieben melden.
+        Bitte keine Zugangsdaten, Tokens oder vollständigen MAC-Adressen einfügen.
+  - type: textarea
+    id: was
+    attributes:
+      label: Was passiert?
+      description: Und was hättest du erwartet?
+    validations:
+      required: true
+  - type: textarea
+    id: schritte
+    attributes:
+      label: So kommt es
+      description: Aufruf, Tasten, Stufe. Mit `--seed <zahl>` lässt sich ein Spiel genau wiederholen.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: meldung
+    attributes:
+      label: Meldung im Konsolenfenster
+      render: text
+  - type: input
+    id: umgebung
+    attributes:
+      label: Umgebung
+      description: Windows-Fassung, Konsole (Windows Terminal, klassisches Fenster), Geräteart, LichtDuell-Stand
+    validations:
+      required: true

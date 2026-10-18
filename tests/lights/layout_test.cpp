@@ -1,13 +1,13 @@
-// Ausgabe an den Streifen ohne Netz: Takt (FramePacer) und Streifenbild samt Layout.
+// Für alle Geräte gleich, ohne Netz: Takt (FramePacer) und Streifenbild samt Layout.
 
-#include "govee/frame_pacer.hpp"
-#include "govee/strip.hpp"
+#include "lights/frame_pacer.hpp"
+#include "lights/layout.hpp"
 
 #include <doctest.h>
 
 #include <vector>
 
-namespace ldu::govee {
+namespace ldu::lights {
 
 TEST_CASE("Takt: erstes Bild geht sofort, danach höchstens max_fps") {
     FramePacer pacer(30.0, 2.0);
@@ -104,4 +104,4 @@ TEST_CASE("Layout: ohne Segmente und Versatz bleibt alles 1:1, zu großer Versat
     CHECK(out == std::vector<Rgb>{kBlack, kBlack, Rgb{1, 0, 0}});
 }
 
-}  // namespace ldu::govee
+}  // namespace ldu::lights

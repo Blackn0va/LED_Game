@@ -1,8 +1,8 @@
-#include "govee/frame_pacer.hpp"
+#include "lights/frame_pacer.hpp"
 
 #include <algorithm>
 
-namespace ldu::govee {
+namespace ldu::lights {
 
 FramePacer::FramePacer(double max_fps, double keepalive_s)
     : min_interval_s_(1.0 / std::max(max_fps, 1.0)), keepalive_s_(keepalive_s) {}
@@ -23,4 +23,4 @@ void FramePacer::mark_sent(double now_s) {
     sent_any_ = true;
 }
 
-}  // namespace ldu::govee
+}  // namespace ldu::lights

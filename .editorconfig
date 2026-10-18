@@ -1,0 +1,28 @@
+# Stil der Dateien – Editoren mit EditorConfig halten ihn von selbst.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 4
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{yml,yaml,json,xml}]
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
+
+# PowerShell: UTF-8 MIT BOM und CRLF – Windows PowerShell 5.1 liest Dateien ohne BOM als
+# ANSI und zerlegt die Umlaute (siehe Kopf von build.ps1).
+[*.{ps1,psm1,psd1}]
+charset = utf-8-bom
+end_of_line = crlf
+
+[*.{cmd,bat}]
+end_of_line = crlf
+
+[*.rc.in]
+end_of_line = crlf

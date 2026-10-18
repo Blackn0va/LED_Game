@@ -34,8 +34,26 @@ Alle nennenswerten Änderungen an LichtDuell. Format nach
   mit ←/→, Zeitlupe bei Endgegner-Sieg und Spielende, Partienzähler mit bestem Lauf.
 - Computerspieler mit Persönlichkeiten (Reaktionszeit, Fehlerquote, Joker-Mut).
 - Taste A schaltet den Automodus mitten im Spiel an und aus.
+- Weitere Hersteller: **WLED** (UDP-Echtzeit DRGB, bis 490 LEDs, Suche per mDNS, LED-Zahl
+  aus `/json/info`), **Art-Net** (ArtDmx, Suche per ArtPoll) und **sACN/E1.31** (Multicast
+  oder Unicast, dreimal „Strom endet“ beim Beenden) – `--gerät`, `--universum`. Nach der
+  jeweiligen Beschreibung gebaut und ohne Gerät getestet, an echter Hardware noch nicht.
+- Einrichtungs-Assistent `--einrichten`: sucht alle Hersteller gleichzeitig, nummerierte
+  Auswahl oder Eingabe von Hand, speichert und startet das Testbild.
+- `--einstellungen <datei>` für mehrere Streifen mit je eigener Einstellungsdatei.
+- Open-Source-Grundlagen: MIT-Lizenz, CONTRIBUTING (neuen Gerätetreiber bauen), SECURITY,
+  EditorConfig, GitHub-Action (windows-2022, Actions per Commit gepinnt), Issue-Vorlagen.
 
 ### Geändert
+
+- Treiber-Schnittstelle `lights::LightProtocol`: Layout, Takt, Haltebild, Senden und
+  Beenden macht `lights::LightOutput` für alle Hersteller; Govee zieht dorthin um, ohne sein
+  Verhalten zu ändern (dieselben Pakete in derselben Reihenfolge, Wartezeiten jetzt im Test).
+- `--suchen` listet Govee, WLED und Art-Net, gleichzeitig in 2 s statt nacheinander.
+- `--segmente` richtet sich nach der Geräteart (Govee 84, WLED 490, Art-Net/sACN 170);
+  Spielzellen bleiben bei höchstens 84.
+- `einstellungen.txt` kennt `gerät` und `universum`; ältere Dateien ohne `gerät` gelten
+  als Govee.
 
 - Weniger Last: fester Spieltakt, Bild und Konsole im 30er-Takt, Konsole schreibt nur
   geänderte Zeilen – conhost von 7,4–8,6 % auf 2,2–2,4 % eines Kerns (gemessen).

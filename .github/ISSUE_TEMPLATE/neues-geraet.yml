@@ -1,0 +1,60 @@
+name: Neues Gerät / Rückmeldung von einem Gerät
+description: LichtDuell an einem Streifen ausprobiert – was ging, was nicht? Oder ein Gerät, das noch fehlt.
+labels: ["gerät"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Danke! Rückmeldungen von echten WLED-, Art-Net- und sACN-Aufbauten sind gerade das Wichtigste – diese Treiber sind noch an keinem Gerät geprüft.
+        Bitte keine Zugangsdaten, Tokens oder vollständigen MAC-Adressen einfügen.
+  - type: dropdown
+    id: art
+    attributes:
+      label: Geräteart
+      options:
+        - Govee
+        - WLED
+        - Art-Net
+        - sACN / E1.31
+        - noch nicht unterstützt
+    validations:
+      required: true
+  - type: input
+    id: modell
+    attributes:
+      label: Modell und Firmware
+      description: z. B. „Govee H6199“, „WLED 0.15.0 auf ESP32, 150 × WS2812B“, „Falcon F16v4“
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: LichtDuell-Stand
+      description: Commit (`git log -1 --format=%h`) oder Datum des Downloads; die Dateiversion steht in den Eigenschaften der EXE
+  - type: textarea
+    id: aufruf
+    attributes:
+      label: Aufruf und Einstellungen
+      description: Kommandozeile und Inhalt von einstellungen.txt (IP-Adressen darfst du kürzen)
+      render: text
+  - type: checkboxes
+    id: was
+    attributes:
+      label: Was ging?
+      options:
+        - label: Gerät wurde von `--suchen` bzw. `--einrichten` gefunden
+        - label: Testbild erscheint am Streifen (Weiß an der Kanone, Lila am anderen Ende)
+        - label: Spiel läuft flüssig am Streifen
+        - label: Nach Esc kehrt der Streifen in seinen Zustand von vorher zurück
+  - type: textarea
+    id: beobachtung
+    attributes:
+      label: Was hast du gesehen?
+      description: Was der Streifen zeigte, wie lange, und was die Statuszeile unten im Konsolenfenster sagte.
+    validations:
+      required: true
+  - type: textarea
+    id: protokoll
+    attributes:
+      label: Für ein neues Gerät – wo ist das Protokoll beschrieben?
+      description: Link zur Herstellerbeschreibung oder zu einem offenen Projekt, das es anspricht.

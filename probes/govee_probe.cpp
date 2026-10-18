@@ -19,7 +19,7 @@
 // stehen, statt in seine Szene zurückzukehren.
 
 #include "govee/protocol.hpp"
-#include "govee/udp.hpp"
+#include "net/udp.hpp"
 
 #include <winsock2.h>
 #include <ws2tcpip.h>
@@ -40,7 +40,7 @@ void say(const std::string& line) {
     std::fflush(stdout);
 }
 
-bool send(ldu::govee::UdpSender& sender, const std::string& payload) {
+bool send(ldu::net::UdpSender& sender, const std::string& payload) {
     std::string error;
     if (!sender.send(payload, error)) {
         say("  Sendefehler: " + error);
@@ -111,7 +111,7 @@ int raw_status(const std::string& ip) {
 }
 
 // Razer an, 3 s Bilder in `color` mit 30 fps, `pause` Ruhe, dann dreimal Aus (100 ms Abstand).
-void stream_then_off(ldu::govee::UdpSender& sender, ldu::Rgb color, std::chrono::milliseconds pause,
+void stream_then_off(ldu::net::UdpSender& sender, ldu::Rgb color, std::chrono::milliseconds pause,
                      const std::string& name) {
     const auto t0 = std::chrono::steady_clock::now();
     auto stamp = [t0] {
@@ -144,11 +144,11 @@ int main(int argc, char** argv) {
     }
     const std::string ip = argv[1];
     const std::string step = argv[2];
-    const ldu::govee::NetworkSession net;
+    const ldu::net::NetworkSession net;
     if (step == "status") {
         return raw_status(ip);
     }
-    auto sender = ldu::govee::UdpSender::open(ip);
+    auto sender = ldu::net::UdpSender::open(ip, ldu::govee::kCommandPort);
     if (step == "razer-aus") {
         for (int i = 0; i < 3; ++i) {
             send(*sender, ldu::govee::razer_message(ldu::govee::razer_mode_packet(false)));
@@ -208,7 +208,7 @@ int main(int argc, char** argv) {
             stream(s.count, s.color, 80);  // ~4 s
         }
         stream(30, ldu::Rgb{0, 0, 0}, 20);
-        // Zurück zum Zustand davor: 2 s Ruhe, dreimal Aus (siehe govee/strip.hpp).
+        // Zurück zum Zustand davor: 2 s Ruhe, dreimal Aus (siehe govee/driver.hpp).
         std::this_thread::sleep_for(2s);
         for (int i = 0; i < 3; ++i) {
             sender->send(ldu::govee::razer_message(ldu::govee::razer_mode_packet(false)), error);

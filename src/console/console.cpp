@@ -18,7 +18,7 @@ std::atomic<bool> g_quit{false};
 std::atomic<HANDLE> g_cleanup_done{nullptr};
 
 // Beim Schließen des Fensters braucht stop() gut 2,3 s (2 s Ruhe für den H612C, siehe
-// govee/strip.hpp). Vorher stand hier 2000 – das hätte die Aus-Folge abgeschnitten. Ob
+// govee/driver.hpp). Vorher stand hier 2000 – das hätte die Aus-Folge abgeschnitten. Ob
 // Windows 4 s gewährt, belegt der Mitschnitt in probes/README.md.
 inline constexpr DWORD kCloseWaitMs = 4000;
 

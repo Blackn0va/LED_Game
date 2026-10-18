@@ -53,7 +53,12 @@ void apply_settings(std::string_view text, Options& o) {
         const std::string_view key = trim(line.substr(0, eq));
         const std::string_view value = trim(line.substr(eq + 1));
         const std::string what = where + std::string(key);
-        if (key == "ip") {
+        // Ohne Umlaut auch, für Tastaturen ohne ä (Open-Source-Nutzer); geschrieben wird „gerät“.
+        if (key == "gerät" || key == "geraet") {  // umlaut-ok
+            o.device = parse_device(what, value);
+        } else if (key == "universum") {
+            o.universe = parse_bounded(what, value, 0, kMaxUniverseOption);
+        } else if (key == "ip") {
             if (value.empty()) {
                 throw Error(Error::Kind::usage, what + " ist leer.");
             }
@@ -62,11 +67,11 @@ void apply_settings(std::string_view text, Options& o) {
             o.leds = parse_bounded(what, value, kMinLeds, kMaxLeds);
             o.leds_given = true;
         } else if (key == "segmente") {
-            o.segments = parse_bounded(what, value, kMinLeds, kMaxLeds);
+            o.segments = parse_bounded(what, value, kMinLeds, kMaxSegments);
         } else if (key == "versatz") {
-            o.skip = parse_bounded(what, value, 0, kMaxLeds - kMinLeds);
+            o.skip = parse_bounded(what, value, 0, kMaxSegments - kMinLeds);
         } else if (key == "effektbereich") {
-            o.zone = parse_bounded(what, value, 0, kMaxLeds - kMinLeds);
+            o.zone = parse_bounded(what, value, 0, kMaxSegments - kMinLeds);
         } else if (key == "helligkeit") {
             o.brightness = parse_bounded(what, value, 1, 100);
         } else if (key == "fps") {
@@ -85,10 +90,14 @@ void apply_settings(std::string_view text, Options& o) {
 }
 
 std::string format_settings(const Options& o) {
-    std::string s = "# LichtDuell – Einstellungen. Von Hand änderbar; „LichtDuell --testbild“ und S schreiben sie neu.\n"
-                    "# Die Kommandozeile überstimmt jeden Wert hier.\n";
+    std::string s = "# LichtDuell – Einstellungen. Von Hand änderbar; „LichtDuell --einrichten“ bzw.\n"
+                    "# „--testbild“ und S schreiben sie neu. Die Kommandozeile überstimmt jeden Wert hier.\n";
+    s += "gerät = " + std::string(lights::device_key(o.device)) + "\n";
     if (!o.ip.empty()) {
         s += "ip = " + o.ip + "\n";
+    }
+    if (lights::uses_universe(o.device)) {
+        s += "universum = " + std::to_string(o.universe.value_or(lights::default_universe(o.device))) + "\n";
     }
     if (o.segments > 0) {
         s += "segmente = " + std::to_string(o.segments) + "\n";
